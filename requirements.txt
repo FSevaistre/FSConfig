@@ -1,0 +1,11 @@
+# Python dependencies for Claude Code tools
+# Install with: pip3 install -r requirements.txt
+
+# gdrive-dl (Google Drive download script)
+google-api-python-client>=2.100.0
+google-auth>=2.20.0
+google-auth-oauthlib>=1.0.0
+google-auth-httplib2>=0.2.0
+
+# whisper (audio transcription for /transcribe)
+openai-whisper>=20240930

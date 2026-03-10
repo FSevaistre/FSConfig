@@ -1,0 +1,358 @@
+#!/usr/bin/env python3
+"""Download a file or folder from Google Drive using OAuth2 with persistent token storage."""
+
+import argparse
+import io
+import json
+import os
+import re
+import sys
+from pathlib import Path
+
+CONFIG_DIR = Path.home() / ".config" / "gdrive-dl"
+TOKEN_PATH = CONFIG_DIR / "token.json"
+CREDENTIALS_PATH = CONFIG_DIR / "credentials.json"
+
+SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+
+FOLDER_MIME = "application/vnd.google-apps.folder"
+
+EXPORT_MIMES = {
+    "application/vnd.google-apps.document": ("application/pdf", ".pdf"),
+    "application/vnd.google-apps.spreadsheet": (
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ".xlsx",
+    ),
+    "application/vnd.google-apps.presentation": ("application/pdf", ".pdf"),
+    "application/vnd.google-apps.drawing": ("image/png", ".png"),
+}
+
+# Workspace types we can't export (forms, sites, etc.) — skip them
+SKIP_MIMES = {
+    "application/vnd.google-apps.form",
+    "application/vnd.google-apps.map",
+    "application/vnd.google-apps.site",
+    "application/vnd.google-apps.script",
+}
+
+
+def extract_file_id(url_or_id: str) -> str:
+    """Extract file ID from various Google Drive URL formats."""
+    patterns = [
+        r"/folders/([a-zA-Z0-9_-]+)",
+        r"/file/d/([a-zA-Z0-9_-]+)",
+        r"/open\?id=([a-zA-Z0-9_-]+)",
+        r"id=([a-zA-Z0-9_-]+)",
+        r"/d/([a-zA-Z0-9_-]+)",
+        r"^([a-zA-Z0-9_-]{20,})$",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, url_or_id)
+        if match:
+            return match.group(1)
+    return url_or_id
+
+
+def is_folder_url(url: str) -> bool:
+    """Check if the URL looks like a folder link."""
+    return "/folders/" in url or "/drive/" in url
+
+
+def sanitize_name(name: str) -> str:
+    """Replace characters not allowed in file paths."""
+    return re.sub(r'[/\\]', '-', name)
+
+
+def ensure_credentials():
+    """Check that OAuth credentials exist, guide user if not."""
+    if CREDENTIALS_PATH.exists():
+        return True
+
+    print(
+        f"Pas de credentials OAuth trouvés dans {CREDENTIALS_PATH}\n"
+        "\n"
+        "Pour configurer l'accès Google Drive :\n"
+        "1. Va sur https://console.cloud.google.com/apis/credentials\n"
+        "2. Crée un projet (ou utilise un existant)\n"
+        "3. Active l'API Google Drive (APIs & Services > Enable APIs)\n"
+        "4. Crée des identifiants OAuth 2.0 (type: Application de bureau)\n"
+        "5. Télécharge le JSON et place-le dans :\n"
+        f"   {CREDENTIALS_PATH}\n",
+        file=sys.stderr,
+    )
+    return False
+
+
+def get_credentials():
+    """Get valid credentials, refreshing or re-authenticating as needed."""
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+    from google_auth_oauthlib.flow import InstalledAppFlow
+
+    creds = None
+
+    if TOKEN_PATH.exists():
+        try:
+            creds = Credentials.from_authorized_user_file(str(TOKEN_PATH), SCOPES)
+        except Exception:
+            pass
+
+    if creds and creds.valid:
+        return creds
+
+    if creds and creds.expired and creds.refresh_token:
+        try:
+            creds.refresh(Request())
+            TOKEN_PATH.write_text(creds.to_json())
+            return creds
+        except Exception:
+            print("Token expiré, re-authentification nécessaire.", file=sys.stderr)
+
+    if not ensure_credentials():
+        sys.exit(1)
+
+    flow = InstalledAppFlow.from_client_secrets_file(str(CREDENTIALS_PATH), SCOPES)
+    creds = flow.run_local_server(port=0, open_browser=True)
+
+    TOKEN_PATH.write_text(creds.to_json())
+    print("Token sauvegardé, les prochains téléchargements n'auront pas besoin de connexion.", file=sys.stderr)
+    return creds
+
+
+def get_file_metadata(service, file_id: str) -> dict:
+    """Get file name and MIME type."""
+    return (
+        service.files()
+        .get(fileId=file_id, fields="name,mimeType,size", supportsAllDrives=True)
+        .execute()
+    )
+
+
+def list_folder(service, folder_id: str) -> list[dict]:
+    """List all files in a folder."""
+    items = []
+    page_token = None
+    query = f"'{folder_id}' in parents and trashed = false"
+    while True:
+        resp = (
+            service.files()
+            .list(
+                q=query,
+                fields="nextPageToken, files(id, name, mimeType)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+                pageSize=1000,
+                pageToken=page_token,
+            )
+            .execute()
+        )
+        items.extend(resp.get("files", []))
+        page_token = resp.get("nextPageToken")
+        if not page_token:
+            break
+    return items
+
+
+def download_single_file(service, file_id: str, output_path: str, mime_type: str | None, known_mime: str | None = None) -> str:
+    """Download a single file from Google Drive."""
+    from googleapiclient.http import MediaIoBaseDownload
+
+    if known_mime:
+        file_mime = known_mime
+        file_name = os.path.basename(output_path) if output_path else file_id
+    else:
+        meta = get_file_metadata(service, file_id)
+        file_name = meta.get("name", file_id)
+        file_mime = meta.get("mimeType", "")
+
+    safe_name = sanitize_name(file_name)
+
+    if file_mime in SKIP_MIMES:
+        print(f"  Ignoré (type non exportable): {file_name}", file=sys.stderr)
+        return ""
+
+    if file_mime in EXPORT_MIMES:
+        export_mime, ext = EXPORT_MIMES[file_mime]
+        if mime_type:
+            export_mime = mime_type
+        request = service.files().export_media(fileId=file_id, mimeType=export_mime)
+        if not output_path:
+            output_path = safe_name + ext
+        elif not any(output_path.endswith(e) for e in (".pdf", ".xlsx", ".png")):
+            output_path = output_path + ext
+    elif file_mime.startswith("application/vnd.google-apps."):
+        # Unknown Workspace type — try PDF export, skip on failure
+        print(f"  Type Workspace inconnu ({file_mime}), export PDF...", file=sys.stderr)
+        try:
+            request = service.files().export_media(fileId=file_id, mimeType="application/pdf")
+            if not output_path:
+                output_path = safe_name + ".pdf"
+            elif not output_path.endswith(".pdf"):
+                output_path = output_path + ".pdf"
+        except Exception:
+            print(f"  Ignoré (export impossible): {file_name}", file=sys.stderr)
+            return ""
+    else:
+        request = service.files().get_media(fileId=file_id, supportsAllDrives=True)
+        if not output_path:
+            output_path = safe_name
+
+    # Ensure parent directory exists
+    parent = os.path.dirname(output_path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+
+    fh = io.BytesIO()
+    downloader = MediaIoBaseDownload(fh, request)
+    done = False
+    while not done:
+        status, done = downloader.next_chunk()
+        if status:
+            pct = int(status.progress() * 100)
+            print(f"\r  Téléchargement {safe_name}: {pct}%", end="", file=sys.stderr)
+
+    print(file=sys.stderr)
+
+    with open(output_path, "wb") as f:
+        f.write(fh.getvalue())
+
+    return output_path
+
+
+def download_folder(service, folder_id: str, output_dir: str, mime_type: str | None) -> list[str]:
+    """Recursively download all files in a Google Drive folder."""
+    meta = get_file_metadata(service, folder_id)
+    folder_name = sanitize_name(meta.get("name", folder_id))
+
+    if not output_dir:
+        output_dir = folder_name
+    os.makedirs(output_dir, exist_ok=True)
+
+    print(f"Dossier: {output_dir}/", file=sys.stderr)
+
+    items = list_folder(service, folder_id)
+    downloaded = []
+
+    for item in items:
+        item_name = sanitize_name(item["name"])
+        item_mime = item["mimeType"]
+        item_id = item["id"]
+
+        if item_mime == FOLDER_MIME:
+            sub_dir = os.path.join(output_dir, item_name)
+            downloaded.extend(download_folder(service, item_id, sub_dir, mime_type))
+        elif item_mime in SKIP_MIMES:
+            print(f"  Ignoré (type non exportable): {item_name}", file=sys.stderr)
+        else:
+            out_path = os.path.join(output_dir, item_name)
+            try:
+                result = download_single_file(service, item_id, out_path, mime_type, known_mime=item_mime)
+                if result:
+                    downloaded.append(result)
+            except Exception as e:
+                print(f"  Erreur sur {item_name}: {e}", file=sys.stderr)
+
+    return downloaded
+
+
+def search_files(service, query: str, modified_after: str | None = None, max_results: int = 20) -> list[dict]:
+    """Search for files in Google Drive by name or full-text."""
+    clauses = [f"name contains '{query}'", "trashed = false"]
+    if modified_after:
+        clauses.append(f"modifiedTime >= '{modified_after}T00:00:00'")
+    q = " and ".join(clauses)
+
+    items = []
+    page_token = None
+    while len(items) < max_results:
+        resp = (
+            service.files()
+            .list(
+                q=q,
+                fields="nextPageToken, files(id, name, mimeType, modifiedTime, webViewLink)",
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+                pageSize=min(max_results - len(items), 100),
+                pageToken=page_token,
+                orderBy="modifiedTime desc",
+            )
+            .execute()
+        )
+        items.extend(resp.get("files", []))
+        page_token = resp.get("nextPageToken")
+        if not page_token:
+            break
+    return items[:max_results]
+
+
+def main():
+    # Detect if first arg is "search" subcommand
+    is_search = len(sys.argv) > 1 and sys.argv[1] == "search"
+
+    if is_search:
+        parser = argparse.ArgumentParser(description="Recherche des fichiers sur Google Drive")
+        parser.add_argument("command")  # "search"
+        parser.add_argument("query", help="Terme de recherche")
+        parser.add_argument("--after", help="Date minimum de modification (YYYY-MM-DD)")
+        parser.add_argument("--max", type=int, default=20, help="Nombre max de résultats")
+        parser.add_argument("--download", action="store_true", help="Télécharge tous les résultats")
+        parser.add_argument("-o", "--output", help="Dossier de sortie pour --download")
+    else:
+        parser = argparse.ArgumentParser(description="Télécharge un fichier ou dossier depuis Google Drive")
+        parser.add_argument("url", nargs="?", help="URL ou ID du fichier/dossier Google Drive")
+        parser.add_argument("-o", "--output", help="Chemin de sortie (défaut: nom original)")
+        parser.add_argument("--mime", help="MIME type pour l'export (fichiers Google Workspace)")
+        parser.add_argument("--setup", action="store_true", help="Affiche les instructions de configuration")
+
+    args = parser.parse_args()
+
+    if not is_search and args.setup:
+        ensure_credentials()
+        return
+
+    from googleapiclient.discovery import build
+
+    creds = get_credentials()
+    service = build("drive", "v3", credentials=creds)
+
+    if is_search:
+        results = search_files(service, args.query, args.after, args.max)
+        if not results:
+            print("Aucun fichier trouvé.")
+            return
+        print(json.dumps(results, indent=2, ensure_ascii=False))
+        if args.download and results:
+            out_dir = args.output or "."
+            os.makedirs(out_dir, exist_ok=True)
+            downloaded = []
+            for f in results:
+                if f["mimeType"] == FOLDER_MIME:
+                    continue
+                out_path = os.path.join(out_dir, sanitize_name(f["name"]))
+                try:
+                    result = download_single_file(service, f["id"], out_path, None, known_mime=f["mimeType"])
+                    if result:
+                        downloaded.append(result)
+                except Exception as e:
+                    print(f"  Erreur sur {f['name']}: {e}", file=sys.stderr)
+            print(f"\n{len(downloaded)} fichier(s) téléchargé(s)")
+        return
+
+    if not args.url:
+        parser.print_help()
+        return
+
+    file_id = extract_file_id(args.url)
+
+    # Check if it's a folder
+    meta = get_file_metadata(service, file_id)
+    if meta.get("mimeType") == FOLDER_MIME:
+        downloaded = download_folder(service, file_id, args.output, args.mime)
+        print(f"Dossier téléchargé: {len(downloaded)} fichier(s)")
+    else:
+        output = download_single_file(service, file_id, args.output, args.mime)
+        print(f"Fichier téléchargé: {output}")
+
+
+if __name__ == "__main__":
+    main()
