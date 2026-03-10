@@ -1,0 +1,9 @@
+{
+  "statusLine": {
+    "type": "command",
+    "command": "bash /home/francois/.claude/statusline.sh",
+    "padding": 2
+  },
+  "language": "Français",
+  "effortLevel": "high"
+}

@@ -1,0 +1,49 @@
+{
+  "org": "my-org",
+  "repo": "my-org/my-repo",
+  "board_data_source": "collection://00000000-0000-0000-0000-000000000000",
+  "me": {
+    "name": "Jane Doe",
+    "slack_id": "U000000XXXX",
+    "email": "jane@example.com",
+    "github": "janedoe",
+    "notion_user_id": null
+  },
+  "managees": [
+    {
+      "name": "Alice Martin",
+      "first_name": "Alice",
+      "role": "manager",
+      "title": "Engineering Manager",
+      "slack_id": "U000000AAAA",
+      "email": "alice@example.com",
+      "github": "alicemartin",
+      "notion_user_id": "00000000-0000-0000-0000-000000000001",
+      "notion_1to1_page": "00000000-0000-0000-0000-000000000010",
+      "team": [
+        {
+          "name": "Charlie Durand",
+          "first_name": "Charlie",
+          "title": "Software Engineer",
+          "slack_id": "U000000CCCC",
+          "email": "charlie@example.com",
+          "github": "charliedurand",
+          "notion_user_id": "00000000-0000-0000-0000-000000000003"
+        }
+      ]
+    },
+    {
+      "name": "Bob Dupont",
+      "first_name": "Bob",
+      "aliases": ["BD"],
+      "role": "ic",
+      "title": "Senior Developer",
+      "slack_id": "U000000BBBB",
+      "email": "bob@example.com",
+      "github": "bobdupont",
+      "notion_user_id": "00000000-0000-0000-0000-000000000002",
+      "notion_1to1_page": "00000000-0000-0000-0000-000000000020",
+      "team": []
+    }
+  ]
+}

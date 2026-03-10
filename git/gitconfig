@@ -1,0 +1,11 @@
+[credential "https://github.com"]
+	helper = 
+	helper = !/usr/bin/gh auth git-credential
+[user]
+	email = francois@pretto.fr
+	name = FSevaistre
+[core]
+	editor = vim
+[push]
+	autoSetupRemote = true
+	default = current
