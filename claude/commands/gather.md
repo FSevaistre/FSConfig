@@ -15,7 +15,11 @@ Si l'argument est vide, AVANT de commencer la collecte, récupère la page Notio
 
 Si l'argument est explicitement fourni, l'utiliser tel quel (pas de reprise automatique).
 
-Suis ces étapes dans l'ordre. IMPORTANT : collecte un maximum de données AVANT de rédiger le résumé final. Utilise des agents en parallèle quand c'est possible pour aller plus vite.
+### Heure locale
+
+AVANT de commencer, exécute `date +"%Y-%m-%d %H:%M %Z"` pour connaître l'heure locale exacte. Utilise TOUJOURS cette heure pour les timestamps dans le résumé et la page Notion. Ne JAMAIS deviner l'heure ou utiliser UTC — l'utilisateur est en Europe/Paris.
+
+Suis ces étapes dans l'ordre. IMPORTANT : collecte un maximum de données AVANT de rédiger le résumé final. Utilise des agents en parallèle quand c'est possible pour aller plus vite. NE PAS OUBLIER l'étape 7 (écriture Notion + sous-pages sources) après avoir affiché le résumé.
 
 PRIORITÉ DES SOURCES (de la plus riche à la moins riche) :
 1. TRANSCRIPTS & NOTES GEMINI — c'est LA source la plus importante. Ils contiennent le verbatim des discussions, les décisions, les désaccords, les actions. Toujours les télécharger et les lire en entier.
@@ -101,11 +105,16 @@ Utilise `mcp__claude_ai_Notion__notion-fetch` sur les pages les plus pertinentes
 ## Étape 4 — Slack
 
 Fais plusieurs recherches avec `mcp__claude_ai_Slack__slack_search_public_and_private` :
-- `from:<@U3KR4PTDX> after:YYYY-MM-DD` — messages envoyés par l'utilisateur
-- `to:<@U3KR4PTDX> after:YYYY-MM-DD` — messages adressés à l'utilisateur
-- `after:YYYY-MM-DD` dans des canaux importants si connus
+- `from:<@U3KR4PTDX> on:YYYY-MM-DD` — messages envoyés par l'utilisateur
+- `to:<@U3KR4PTDX> on:YYYY-MM-DD` — messages adressés à l'utilisateur
+- `on:YYYY-MM-DD` dans des canaux importants si connus
 
 Paramètres : `sort="timestamp"`, `sort_dir="desc"`, `include_context=false`, `response_format="concise"`
+
+IMPORTANT — Filtres de date Slack :
+- Pour un gather sur une seule journée : utiliser `on:YYYY-MM-DD`
+- Pour un gather sur plusieurs jours : utiliser `after:YYYY-MM-DD` avec la veille du jour de début (le filtre `after:` est exclusif dans Slack, il faut soustraire 1 jour). Ex: pour commencer le 14 mars, utiliser `after:2026-03-13`.
+- NE JAMAIS utiliser `after:YYYY-MM-DD` avec la date du jour elle-même, ça exclut le jour courant.
 
 ### Hiérarchie des canaux Slack
 
@@ -158,20 +167,20 @@ Pour les canaux TIER 2-3, lire aussi les threads si le sujet semble important (d
 Tout est collecté et stocké dans la sous-page Slack. Le résumé est ensuite rédigé avec le niveau de détail correspondant au tier.
 
 Pour les recherches, faire en priorité :
-1. `in:comex after:YYYY-MM-DD`
-2. `in:management_group after:YYYY-MM-DD`
-3. `in:tech-management after:YYYY-MM-DD`
-4. `in:core-tech after:YYYY-MM-DD`
-5. `in:product-management after:YYYY-MM-DD`
-6. `from:<@U3KR4PTDX> after:YYYY-MM-DD` (messages envoyés par l'utilisateur)
-7. `to:<@U3KR4PTDX> after:YYYY-MM-DD` (messages adressés à l'utilisateur)
+1. `in:comex on:YYYY-MM-DD`
+2. `in:management_group on:YYYY-MM-DD`
+3. `in:tech-management on:YYYY-MM-DD`
+4. `in:core-tech on:YYYY-MM-DD`
+5. `in:product-management on:YYYY-MM-DD`
+6. `from:<@U3KR4PTDX> on:YYYY-MM-DD` (messages envoyés par l'utilisateur)
+7. `to:<@U3KR4PTDX> on:YYYY-MM-DD` (messages adressés à l'utilisateur)
 
 Si un thread semble contenir une décision ou une action, utilise `mcp__claude_ai_Slack__slack_read_thread` pour lire le détail.
 
 ### Threads actifs à surveiller
 
 En plus des recherches ci-dessus, cherche les threads avec beaucoup d'activité (3+ réponses) sur les canaux TIER 1 et TIER 2 :
-- `is:thread after:YYYY-MM-DD in:<canal>` pour chaque canal TIER 1 et TIER 2
+- `is:thread on:YYYY-MM-DD in:<canal>` pour chaque canal TIER 1 et TIER 2
 - Regarde le champ `reply_count` dans les résultats de recherche. Tout thread avec 3+ réponses est considéré actif.
 
 Pour chaque thread actif détecté :
