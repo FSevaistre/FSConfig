@@ -146,7 +146,6 @@ if ask "GNOME (extensions + focus fix) ?"; then
   echo "   - Caffeine (empeche la mise en veille)"
   echo "   - Vitals (CPU/RAM/temp dans la barre)"
   echo "   - Clipboard Indicator (historique presse-papier)"
-  echo "   - GSConnect (connecte le telephone Android)"
 fi
 
 echo ""

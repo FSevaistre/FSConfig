@@ -1,11 +1,19 @@
 ---
 description: Rassemble toutes les infos (agenda, transcripts, Notion, Slack, Gmail) depuis une date et produit un résumé
-allowed-tools: Bash, Read, Write, Glob, Grep, mcp__claude_ai_Google_Calendar__gcal_list_events, mcp__claude_ai_Google_Calendar__gcal_get_event, mcp__claude_ai_Gmail__gmail_search_messages, mcp__claude_ai_Gmail__gmail_read_message, mcp__claude_ai_Gmail__gmail_read_thread, mcp__claude_ai_Slack__slack_search_public_and_private, mcp__claude_ai_Slack__slack_read_channel, mcp__claude_ai_Slack__slack_read_thread, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-fetch, Agent
+allowed-tools: Bash, Read, Write, Glob, Grep, mcp__claude_ai_Google_Calendar__gcal_list_events, mcp__claude_ai_Google_Calendar__gcal_get_event, mcp__claude_ai_Gmail__gmail_search_messages, mcp__claude_ai_Gmail__gmail_read_message, mcp__claude_ai_Gmail__gmail_read_thread, mcp__claude_ai_Slack__slack_search_public_and_private, mcp__claude_ai_Slack__slack_read_channel, mcp__claude_ai_Slack__slack_read_thread, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Notion__notion-create-pages, Agent
 ---
 
 L'utilisateur veut un résumé de tout ce qui s'est passé depuis une date donnée. L'argument fourni est : $ARGUMENTS
 
-La date fournie doit être interprétée comme la date de début. La date de fin est aujourd'hui. Si l'argument est vide ou absent, utiliser aujourd'hui comme date de début (gather sur la journée en cours). Si l'argument est relatif (ex: "lundi", "la semaine dernière", "3 jours"), convertis-le en date absolue.
+L'argument peut contenir une date et optionnellement une heure, séparées par un espace ou tout autre format naturel. Exemples : "2026-03-14", "vendredi 14h", "lundi 10:30", "la semaine dernière", "3 jours", "aujourd'hui 15h".
+
+La date (et heure si fournie) est interprétée comme le début de la période. La fin est maintenant. Si l'argument est vide ou absent, utiliser aujourd'hui à 00:00:00 comme début (gather sur la journée en cours). Si l'argument est relatif (ex: "lundi", "la semaine dernière", "3 jours"), convertis-le en date/heure absolue. Si une heure est fournie sans date, utiliser aujourd'hui à cette heure. Si aucune heure n'est fournie, utiliser 00:00:00.
+
+### Reprise automatique depuis le dernier gather
+
+Si l'argument est vide, AVANT de commencer la collecte, récupère la page Notion "Gathered" (ID : `325d2e40-ea50-8194-8e49-e4f2926780ec`) avec `mcp__claude_ai_Notion__notion-fetch`. Regarde la première entrée (la plus récente, en haut de page) et extrais la date/heure du dernier gather. Utilise cette date/heure comme date de début au lieu de minuit aujourd'hui. Cela permet d'enchaîner les gathers sans trous ni doublons.
+
+Si l'argument est explicitement fourni, l'utiliser tel quel (pas de reprise automatique).
 
 Suis ces étapes dans l'ordre. IMPORTANT : collecte un maximum de données AVANT de rédiger le résumé final. Utilise des agents en parallèle quand c'est possible pour aller plus vite.
 
@@ -20,7 +28,7 @@ PRIORITÉ DES SOURCES (de la plus riche à la moins riche) :
 ## Étape 1 — Google Calendar + Transcripts Gemini
 
 Utilise `mcp__claude_ai_Google_Calendar__gcal_list_events` avec :
-- timeMin = date de début à 00:00:00
+- timeMin = date de début à l'heure fournie (ou 00:00:00 si aucune heure spécifiée)
 - timeMax = maintenant
 - timeZone = Europe/Paris
 - condenseEventDetails = false (pour avoir les attachments et la description)
@@ -101,7 +109,9 @@ Paramètres : `sort="timestamp"`, `sort_dir="desc"`, `include_context=false`, `r
 
 ### Hiérarchie des canaux Slack
 
-TIER 1 — Direction & stratégie (TOUJOURS lire les threads) :
+Tous les canaux sont lus et collectés. Les tiers déterminent le niveau de détail dans le RÉSUMÉ :
+
+TIER 1 — Direction & stratégie (résumer chaque message/thread en détail, citer qui a dit quoi) :
 - #comex (C02RKJG8P0Q)
 - #comex-et-legal (C04BC17BF62)
 - #management_group (GPW8XBBUZ)
@@ -110,7 +120,7 @@ TIER 1 — Direction & stratégie (TOUJOURS lire les threads) :
 - #core-tech (C031Y86H4TV)
 - DMs et group DMs (canaux de type im/mpim)
 
-TIER 2 — Équipe produit & tech (lire si mention ou sujet important) :
+TIER 2 — Équipe produit & tech (résumer les sujets importants, regrouper le reste) :
 - #team-produit-tech (CN08K8G01)
 - #team-pretto-produit-tech (C04HGTGJC6Q)
 - #team-pretto-tech (C049GCM1KPS)
@@ -120,7 +130,7 @@ TIER 2 — Équipe produit & tech (lire si mention ou sujet important) :
 - #salesops-tech-product (C02EFFM0N9W)
 - #recrutement-tech (C02T36Q7R2N)
 
-TIER 3 — Squads & projets (noter si pertinent) :
+TIER 3 — Squads & projets (résumer en 1 ligne par sujet notable, omettre le bruit) :
 - #team-apollo-tech (C03EYTQ4XSM)
 - #team-finspot-produit-tech (C043M2L0V99)
 - #squad-eclipse-tech (C0AHRTNP29M)
@@ -130,28 +140,22 @@ TIER 3 — Squads & projets (noter si pertinent) :
 - #general (C3LHVQACU)
 - #tech-sharing (CCTM61J1G)
 
-TIER 4 — Alertes & bots (ignorer sauf incident non résolu) :
+TIER 4 — Alertes & bots (mentionner uniquement les incidents non résolus ou les volumes anormaux) :
 - #alerts-* (tous les canaux d'alertes)
 - Messages de bots — `include_bots=false` par défaut
 
-### Triage et pondération des messages
+### Collecte et triage
 
-PRIORITÉ HAUTE (lire le thread complet avec slack_read_thread) :
+TOUJOURS lire les threads complets (slack_read_thread) pour :
 - Tout message dans un canal TIER 1
 - DMs et group DMs
 - Messages où l'utilisateur est mentionné (@François)
 - Messages écrits par l'utilisateur lui-même
+- Tout thread avec 3+ réponses quel que soit le canal
 
-PRIORITÉ MOYENNE (noter dans le résumé) :
-- Messages dans des canaux TIER 2
-- Annonces dans #general
-- Messages avec des liens partagés (docs, PRs, designs)
+Pour les canaux TIER 2-3, lire aussi les threads si le sujet semble important (décision, blocage, lien partagé, annonce).
 
-PRIORITÉ BASSE (ignorer sauf contenu notable) :
-- Messages dans des canaux TIER 3-4
-- Messages de bots, notifications automatiques
-
-Quand il y a beaucoup de messages dans un même thread, résumer le thread plutôt que lister chaque message. Identifier qui a dit quoi sur les points importants.
+Tout est collecté et stocké dans la sous-page Slack. Le résumé est ensuite rédigé avec le niveau de détail correspondant au tier.
 
 Pour les recherches, faire en priorité :
 1. `in:comex after:YYYY-MM-DD`
@@ -163,6 +167,33 @@ Pour les recherches, faire en priorité :
 7. `to:<@U3KR4PTDX> after:YYYY-MM-DD` (messages adressés à l'utilisateur)
 
 Si un thread semble contenir une décision ou une action, utilise `mcp__claude_ai_Slack__slack_read_thread` pour lire le détail.
+
+### Threads actifs à surveiller
+
+En plus des recherches ci-dessus, cherche les threads avec beaucoup d'activité (3+ réponses) sur les canaux TIER 1 et TIER 2 :
+- `is:thread after:YYYY-MM-DD in:<canal>` pour chaque canal TIER 1 et TIER 2
+- Regarde le champ `reply_count` dans les résultats de recherche. Tout thread avec 3+ réponses est considéré actif.
+
+Pour chaque thread actif détecté :
+1. Lis le thread complet avec `slack_read_thread`
+2. Fais un mini-résumé : sujet, participants, conclusion ou état actuel
+3. Évalue si l'utilisateur devrait intervenir. Critères d'intervention :
+   - Une question est posée sans réponse et FS pourrait y répondre
+   - Une décision est en train d'être prise sans l'avis de FS
+   - Un blocage est signalé qui remonte à FS
+   - Un désaccord qui pourrait nécessiter un arbitrage
+   - L'utilisateur est mentionné mais n'a pas encore répondu
+
+Dans le résumé final, ajoute une section dédiée si des threads nécessitent une intervention :
+
+```
+THREADS ACTIFS À SURVEILLER
+----------------------------
+- #canal — sujet (N réponses) : [résumé 1 ligne]. ACTION REQUISE : [ce qu'il faudrait faire]
+- #canal — sujet (N réponses) : [résumé 1 ligne]. RAS, juste FYI.
+```
+
+Ne lister que les threads avec du contenu substantiel (pas les threads de 3 emojis).
 
 ## Étape 5 — Gmail
 
@@ -236,3 +267,78 @@ NOTIFICATIONS & ALERTES (résumé groupé)
 ```
 
 Sois concis mais complet. Privilégie les informations actionnables.
+
+## Étape 7 — Écriture dans la page Notion "Gathered" + sous-pages sources
+
+Après avoir affiché le résumé à l'utilisateur, écris le résumé ET les données brutes dans Notion.
+
+### 7a — Créer les sous-pages sources
+
+Pour CHAQUE source collectée ayant du contenu, crée une sous-page sous la page Gathered (ID : `325d2e40-ea50-8194-8e49-e4f2926780ec`) avec `mcp__claude_ai_Notion__notion-create-pages` :
+
+```json
+{
+  "parent": {"page_id": "325d2e40-ea50-8194-8e49-e4f2926780ec"},
+  "pages": [
+    {
+      "properties": {"title": "YYYY-MM-DD HH:mm — <type source> — <nom>"},
+      "icon": "<emoji>",
+      "content": "<contenu brut>"
+    }
+  ]
+}
+```
+
+Types de sous-pages à créer (une par source, regrouper quand c'est logique) :
+
+1. **Transcripts Gemini** (icône : "📝") — UNE sous-page par transcript/notes de meeting
+   - Titre : `YYYY-MM-DD HH:mm — Transcript — <nom du meeting>`
+   - Contenu : le texte complet du transcript tel que lu dans le PDF (notes Gemini + transcription verbatim si disponible)
+
+2. **Slack** (icône : "💬") — UNE sous-page regroupant tous les résultats Slack
+   - Titre : `YYYY-MM-DD HH:mm — Slack`
+   - Contenu : tous les messages récupérés, organisés par canal avec les threads lus. Format :
+     ```
+     ### #canal-name
+     - [timestamp] @user : message
+     - [timestamp] @user : message
+       Thread (N replies) :
+       - @user : reply
+       - @user : reply
+     ```
+
+3. **Gmail** (icône : "📧") — UNE sous-page regroupant les emails importants lus
+   - Titre : `YYYY-MM-DD HH:mm — Gmail`
+   - Contenu : pour chaque email lu avec gmail_read_message, inclure From, To, Subject, Date et le body. Pour les emails non lus (notifications), lister juste le sujet groupé.
+
+4. **Notion 1:1** (icône : "📓") — UNE sous-page si des pages 1:1 ont été consultées
+   - Titre : `YYYY-MM-DD HH:mm — Notion 1:1`
+   - Contenu : les extraits pertinents des pages 1:1 consultées (dernière entrée de chaque 1:1)
+
+5. **Calendar** (icône : "📅") — UNE sous-page avec la liste brute des events
+   - Titre : `YYYY-MM-DD HH:mm — Calendar`
+   - Contenu : dump JSON simplifié des events (summary, start, end, attendees, hasAttachments)
+
+NE PAS créer de sous-page pour une source qui n'a donné aucun résultat.
+
+Les sous-pages peuvent être créées en parallèle dans un seul appel à `notion-create-pages` (multi-pages).
+
+### 7b — Écrire le résumé dans la page principale
+
+Utilise `mcp__claude_ai_Notion__notion-fetch` pour récupérer le contenu actuel de la page, puis `mcp__claude_ai_Notion__notion-update-page` pour PREPEND (ajouter AU DESSUS du contenu existant) une nouvelle entrée.
+
+Format de chaque entrée :
+```
+## <mention-date start="YYYY-MM-DD" startTime="HH:mm" timeZone="Europe/Paris"/> — Gather
+
+<details>
+<summary>Sources collectées (N sous-pages)</summary>
+	- [liste des sous-pages créées avec leur titre]
+</details>
+
+[Le résumé complet en Notion markdown — utiliser ### pour les sous-sections, **gras** pour les noms, - pour les listes]
+
+---
+```
+
+L'entrée la plus récente doit toujours être en haut de la page. La date/heure dans le heading est l'heure actuelle (= le moment où le gather est exécuté), ce qui permet au prochain gather sans argument de reprendre depuis cette heure.
