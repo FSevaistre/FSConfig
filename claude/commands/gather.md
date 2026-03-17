@@ -1,9 +1,9 @@
 ---
-description: Rassemble toutes les infos (agenda, transcripts, Notion, Slack, Gmail) depuis une date et produit un résumé
+description: Rassemble toutes les infos (agenda, transcripts, Notion, Slack, Gmail, GitHub, Board) depuis une date et produit un résumé stratégique
 allowed-tools: Bash, Read, Write, Glob, Grep, mcp__claude_ai_Google_Calendar__gcal_list_events, mcp__claude_ai_Google_Calendar__gcal_get_event, mcp__claude_ai_Gmail__gmail_search_messages, mcp__claude_ai_Gmail__gmail_read_message, mcp__claude_ai_Gmail__gmail_read_thread, mcp__claude_ai_Slack__slack_search_public_and_private, mcp__claude_ai_Slack__slack_read_channel, mcp__claude_ai_Slack__slack_read_thread, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Notion__notion-create-pages, Agent
 ---
 
-L'utilisateur veut un résumé de tout ce qui s'est passé depuis une date donnée. L'argument fourni est : $ARGUMENTS
+L'utilisateur est CTO. Ce gather doit produire une vision stratégique, pas un dump chronologique. L'argument fourni est : $ARGUMENTS
 
 L'argument peut contenir une date et optionnellement une heure, séparées par un espace ou tout autre format naturel. Exemples : "2026-03-14", "vendredi 14h", "lundi 10:30", "la semaine dernière", "3 jours", "aujourd'hui 15h".
 
@@ -13,21 +13,35 @@ La date (et heure si fournie) est interprétée comme le début de la période. 
 
 Si l'argument est vide, AVANT de commencer la collecte, récupère la page Notion "Gathered" (ID : `325d2e40-ea50-8194-8e49-e4f2926780ec`) avec `mcp__claude_ai_Notion__notion-fetch`. Regarde la première entrée (la plus récente, en haut de page) et extrais la date/heure du dernier gather. Utilise cette date/heure comme date de début au lieu de minuit aujourd'hui. Cela permet d'enchaîner les gathers sans trous ni doublons.
 
+En même temps, lis la section "OUVERT" du dernier gather (les décisions en attente, actions à suivre). Tu dois les tracker dans ce gather : pour chaque item ouvert, vérifier s'il a avancé et le reporter dans le résumé.
+
 Si l'argument est explicitement fourni, l'utiliser tel quel (pas de reprise automatique).
 
 ### Heure locale
 
 AVANT de commencer, exécute `date +"%Y-%m-%d %H:%M %Z"` pour connaître l'heure locale exacte. Utilise TOUJOURS cette heure pour les timestamps dans le résumé et la page Notion. Ne JAMAIS deviner l'heure ou utiliser UTC — l'utilisateur est en Europe/Paris.
 
-Suis ces étapes dans l'ordre. IMPORTANT : collecte un maximum de données AVANT de rédiger le résumé final. Utilise des agents en parallèle quand c'est possible pour aller plus vite. NE PAS OUBLIER l'étape 7 (écriture Notion + sous-pages sources) après avoir affiché le résumé.
+### Profondeur adaptative
+
+Calcule la durée de la fenêtre (timeMax - timeMin) et adapte la profondeur :
+
+- **< 3 heures** : Slack (from/to moi + TIER 1 seulement), Gmail (scan rapide), Calendar. PAS de Notion 1:1 ni Board ni GitHub. Format résumé court.
+- **3-8 heures (demi-journée)** : Tout sauf Notion 1:1. GitHub PRs sur master. Board si pertinent.
+- **> 8 heures (journée+)** : Collecte complète. Notion 1:1, Board, GitHub, transcripts Gemini, tout.
+
+### Ordre d'exécution
+
+Suis ces étapes dans l'ordre. IMPORTANT : collecte un maximum de données AVANT de rédiger le résumé final. Utilise des agents en parallèle quand c'est possible pour aller plus vite. NE PAS OUBLIER l'étape 8 (écriture Notion + sous-pages sources) après avoir affiché le résumé.
 
 PRIORITÉ DES SOURCES (de la plus riche à la moins riche) :
 1. TRANSCRIPTS & NOTES GEMINI — c'est LA source la plus importante. Ils contiennent le verbatim des discussions, les décisions, les désaccords, les actions. Toujours les télécharger et les lire en entier.
 2. Slack canaux TIER 1 (comex, management, core-tech)
 3. Emails internes écrits à la main
 4. Notion
-5. Slack autres canaux
-6. Emails automatiques / notifications
+5. GitHub PRs sur master
+6. Board Produit-Tech
+7. Slack autres canaux
+8. Emails automatiques / notifications
 
 ## Étape 1 — Google Calendar + Transcripts Gemini
 
@@ -78,15 +92,13 @@ Pour chaque transcript, extraire :
 - Les actions assignées (qui doit faire quoi, pour quand)
 - Les questions restées ouvertes
 
-## Étape 3 — Notion (1:1 et pages récentes)
+## Étape 3 — Notion (1:1 et pages récentes) — SKIP si fenêtre < 3h
 
 ### 3a — Pages 1:1
 
-Cherche les pages 1:1 avec `mcp__claude_ai_Notion__notion-search` :
-- query = "1/1"
-- Récupère toutes les pages 1:1 (Xavier, Renaud, Etienne, David, François H.)
+Lis le fichier `~/.claude/team.json` pour obtenir les `notion_1to1_page` de chaque managee.
 
-Pour chaque page 1:1 trouvée, utilise `mcp__claude_ai_Notion__notion-fetch` pour lire son contenu. Regarde la dernière entrée datée (la plus récente) de chaque 1:1. Extraire les éléments importants :
+Pour chaque page 1:1, utilise `mcp__claude_ai_Notion__notion-fetch` pour lire son contenu. Regarde la dernière entrée datée (la plus récente). Extraire :
 - Priorités et succès de la semaine
 - Blocages et difficultés
 - Sujets RH (départs, recrutement, performance)
@@ -94,43 +106,48 @@ Pour chaque page 1:1 trouvée, utilise `mcp__claude_ai_Notion__notion-fetch` pou
 
 ### 3a bis — Pages "Generated by Claude" sous chaque 1:1
 
-Chaque page 1:1 contient une sous-page "Generated by Claude" (icône 🤖) qui stocke les briefings générés par la commande /1to1. Ces briefings contiennent des données déjà agrégées (Slack, GitHub, Board, emails) sur le managee et son équipe.
+Chaque page 1:1 contient une sous-page "Generated by Claude" qui stocke les briefings générés par /1to1. Ces briefings contiennent des données déjà agrégées (Slack, GitHub, Board, emails) sur le managee et son équipe.
 
 Pour chaque page 1:1 :
-1. Cherche la sous-page "Generated by Claude" dans le contenu (balise `<page>` avec le titre "Generated by Claude")
+1. Cherche la sous-page "Generated by Claude" dans le contenu (balise `<page>`)
 2. Utilise `mcp__claude_ai_Notion__notion-fetch` pour la lire
-3. Si elle contient des sous-pages datées (briefings), lis la plus récente
-4. Extrais les informations pertinentes qui datent de la période du gather (pas les briefings trop anciens)
+3. Si elle contient des briefings datés, lis le plus récent qui tombe dans la période du gather
+4. Extrais les informations pertinentes
 
-Ces briefings sont une source précieuse car ils contiennent déjà un résumé structuré de l'activité du managee (PRs, cartes board, messages Slack, blocages, points d'attention).
-
-Intègre ces éléments directement dans le résumé final (sections CE QUI S'EST PASSÉ et DÉCISIONS EN ATTENTE), NE PAS les lister séparément.
+Intègre ces éléments dans le résumé final par projet/initiative, PAS comme une liste séparée.
 
 ### 3b — Autres pages Notion
 
-Utilise `mcp__claude_ai_Notion__notion-search` pour chercher les pages modifiées récemment :
-- Fais une recherche avec un filtre `created_date_range` avec start_date = date de début
-- Cherche avec des termes génériques liés au travail de l'utilisateur
-
-Utilise `mcp__claude_ai_Notion__notion-fetch` sur les pages les plus pertinentes pour lire leur contenu.
+Utilise `mcp__claude_ai_Notion__notion-search` avec un filtre `created_date_range` (start_date = date de début). Lis les pages les plus pertinentes.
 
 ## Étape 4 — Slack
 
-Fais plusieurs recherches avec `mcp__claude_ai_Slack__slack_search_public_and_private` :
-- `from:<@U3KR4PTDX> on:YYYY-MM-DD` — messages envoyés par l'utilisateur
-- `to:<@U3KR4PTDX> on:YYYY-MM-DD` — messages adressés à l'utilisateur
-- `on:YYYY-MM-DD` dans des canaux importants si connus
+### Recherches
 
-Paramètres : `sort="timestamp"`, `sort_dir="desc"`, `include_context=false`, `response_format="concise"`
+Fais les recherches suivantes en parallèle avec `mcp__claude_ai_Slack__slack_search_public_and_private` :
+
+Paramètres communs : `sort="timestamp"`, `sort_dir="desc"`, `include_context=false`, `response_format="concise"`
 
 IMPORTANT — Filtres de date Slack :
 - Pour un gather sur une seule journée : utiliser `on:YYYY-MM-DD`
 - Pour un gather sur plusieurs jours : utiliser `after:YYYY-MM-DD` avec la veille du jour de début (le filtre `after:` est exclusif dans Slack, il faut soustraire 1 jour). Ex: pour commencer le 14 mars, utiliser `after:2026-03-13`.
 - NE JAMAIS utiliser `after:YYYY-MM-DD` avec la date du jour elle-même, ça exclut le jour courant.
 
-### Hiérarchie des canaux Slack
+Ordre de priorité des recherches :
+1. `in:comex <date>`
+2. `in:management_group <date>`
+3. `in:tech-management <date>`
+4. `in:core-tech <date>`
+5. `in:product-management <date>`
+6. `from:<@U3KR4PTDX> <date>` (messages envoyés par moi)
+7. `to:<@U3KR4PTDX> <date>` (messages adressés à moi)
 
-Tous les canaux sont lus et collectés. Les tiers déterminent le niveau de détail dans le RÉSUMÉ :
+Si fenêtre > 3h, ajouter :
+8. `in:team-produit-tech <date>`
+9. `in:team-pretto-produit-tech <date>`
+10. Canaux TIER 2-3 si pertinent
+
+### Hiérarchie des canaux
 
 TIER 1 — Direction & stratégie (résumer chaque message/thread en détail, citer qui a dit quoi) :
 - #comex (C02RKJG8P0Q)
@@ -140,6 +157,10 @@ TIER 1 — Direction & stratégie (résumer chaque message/thread en détail, ci
 - #tech-management (C03337XES3Z)
 - #core-tech (C031Y86H4TV)
 - DMs et group DMs (canaux de type im/mpim)
+
+EXCLUSIONS DMs — Ignorer complètement :
+- Group DM avec Philippe Mineur et Olivier (Olivier Carreau)
+- Tout DM ou group DM impliquant uniquement Philippe Mineur et/ou Olivier Carreau sans autre participant professionnel
 
 TIER 2 — Équipe produit & tech (résumer les sujets importants, regrouper le reste) :
 - #team-produit-tech (CN08K8G01)
@@ -165,56 +186,69 @@ TIER 4 — Alertes & bots (mentionner uniquement les incidents non résolus ou l
 - #alerts-* (tous les canaux d'alertes)
 - Messages de bots — `include_bots=false` par défaut
 
-### Collecte et triage
+### Lecture des threads
 
 TOUJOURS lire les threads complets (slack_read_thread) pour :
 - Tout message dans un canal TIER 1
-- DMs et group DMs
+- DMs et group DMs (hors exclusions)
 - Messages où l'utilisateur est mentionné (@François)
 - Messages écrits par l'utilisateur lui-même
 - Tout thread avec 3+ réponses quel que soit le canal
 
 Pour les canaux TIER 2-3, lire aussi les threads si le sujet semble important (décision, blocage, lien partagé, annonce).
 
-Tout est collecté et stocké dans la sous-page Slack. Le résumé est ensuite rédigé avec le niveau de détail correspondant au tier.
+## Étape 4bis — Radar Business (signaux hors périmètre direct) — SKIP si fenêtre < 3h
 
-Pour les recherches, faire en priorité :
-1. `in:comex on:YYYY-MM-DD`
-2. `in:management_group on:YYYY-MM-DD`
-3. `in:tech-management on:YYYY-MM-DD`
-4. `in:core-tech on:YYYY-MM-DD`
-5. `in:product-management on:YYYY-MM-DD`
-6. `from:<@U3KR4PTDX> on:YYYY-MM-DD` (messages envoyés par l'utilisateur)
-7. `to:<@U3KR4PTDX> on:YYYY-MM-DD` (messages adressés à l'utilisateur)
+L'objectif est de capter les signaux business importants dans les canaux où le CTO n'est pas actif au quotidien. L'approche : des recherches par mots-clés sur TOUS les canaux publics (pas seulement les TIER 1-4).
 
-Si un thread semble contenir une décision ou une action, utilise `mcp__claude_ai_Slack__slack_read_thread` pour lire le détail.
+### Recherches par signal
 
-### Threads actifs à surveiller
+Faire ces recherches en parallèle avec `mcp__claude_ai_Slack__slack_search_public_and_private` :
+- Paramètres : `sort="timestamp"`, `sort_dir="desc"`, `response_format="concise"`, `include_context=true`, `limit=10`
+- Utiliser le même filtre de date que pour l'étape 4
 
-En plus des recherches ci-dessus, cherche les threads avec beaucoup d'activité (3+ réponses) sur les canaux TIER 1 et TIER 2 :
-- `is:thread on:YYYY-MM-DD in:<canal>` pour chaque canal TIER 1 et TIER 2
-- Regarde le champ `reply_count` dans les résultats de recherche. Tout thread avec 3+ réponses est considéré actif.
+1. **Incidents & urgences business** :
+   `"incident" OR "urgent" OR "bloquant" OR "down" OR "en panne" <date>` (exclure les canaux déjà couverts en TIER 1-2 avec `-in:`)
 
-Pour chaque thread actif détecté :
-1. Lis le thread complet avec `slack_read_thread`
-2. Fais un mini-résumé : sujet, participants, conclusion ou état actuel
-3. Évalue si l'utilisateur devrait intervenir. Critères d'intervention :
-   - Une question est posée sans réponse et FS pourrait y répondre
-   - Une décision est en train d'être prise sans l'avis de FS
-   - Un blocage est signalé qui remonte à FS
-   - Un désaccord qui pourrait nécessiter un arbitrage
-   - L'utilisateur est mentionné mais n'a pas encore répondu
+2. **Résultats & chiffres** :
+   `"objectif" OR "résultat" OR "record" OR "conversion" OR "CA" <date>` en filtrant `-in:team-produit-tech -in:team-pretto-produit-tech`
 
-Dans le résumé final, ajoute une section dédiée si des threads nécessitent une intervention :
+3. **Banques & partenaires** (coeur métier) :
+   `in:info-banques <date>` — changements de critères, taux, quotas
+   `in:pôle-banques <date>` — sujets transverses pôle banque
+   `in:alerte-pole-banque <date>` — alertes opérationnelles
 
-```
-THREADS ACTIFS À SURVEILLER
-----------------------------
-- #canal — sujet (N réponses) : [résumé 1 ligne]. ACTION REQUISE : [ce qu'il faudrait faire]
-- #canal — sujet (N réponses) : [résumé 1 ligne]. RAS, juste FYI.
-```
+4. **Client & feedback** :
+   `in:espace-client <date>` — bugs remontés par les EC
+   `in:qualite-des-leads <date>` — qualité du flux entrant
+   `in:feedbacks-zou-client <date>` — retours utilisateurs
 
-Ne lister que les threads avec du contenu substantiel (pas les threads de 3 emojis).
+5. **Sales & pipeline** :
+   `in:sales <date>` — seulement si fenêtre > 8h (trop de bruit sinon)
+
+6. **Marketing & growth** :
+   `in:marketing <date>` — seulement les messages avec 2+ réactions (signal de pertinence)
+
+### Triage des résultats
+
+Pour chaque résultat, évalue sa pertinence CTO :
+- **IMPORTANT** : incident affectant les clients, changement de critères banque, problème de qualité des leads, décision business sans la tech, résultat exceptionnel (positif ou négatif)
+- **FYI** : feedback intéressant, tendance marché, sujet opérationnel qui pourrait devenir technique
+- **IGNORER** : bruit opérationnel quotidien, conversations entre EC, questions individuelles de sales
+
+Ne garder que les résultats IMPORTANT et FYI. Lire les threads complets des résultats IMPORTANT.
+
+### Canaux business de référence
+
+- #info-banques — critères, taux, contacts, quotas (IMPORTANT : tout changement de critères impact le moteur de financement)
+- #pôle-banques — sujets transverses pôle banque
+- #alerte-pole-banque — alertes opérationnelles banques
+- #espace-client — bugs et problèmes clients (IMPORTANT : les bugs UI/UX qui remontent ici sont souvent en avance sur Sentry)
+- #qualite-des-leads — qualité du flux entrant (IMPORTANT : baisse de qualité = problème marketing ou technique)
+- #sales — discussions sales générales
+- #mandat — problèmes opérationnels de signature/envoi
+- #marketing — campagnes, stratégie acquisition
+- #general — annonces company-wide
 
 ## Étape 5 — Gmail
 
@@ -222,9 +256,7 @@ Utilise `mcp__claude_ai_Gmail__gmail_search_messages` avec :
 - q = "after:YYYY/MM/DD" (format Gmail : YYYY/M/D)
 - maxResults = 100
 
-### Triage et pondération des emails
-
-Classe chaque email selon cette grille de priorité :
+### Triage des emails
 
 PRIORITÉ HAUTE (lire le contenu avec gmail_read_message) :
 - Emails internes écrits à la main : From @pretto.fr, To @pretto.fr, PAS un no-reply/via/automated
@@ -237,129 +269,190 @@ PRIORITÉ MOYENNE (noter sujet + expéditeur dans le résumé) :
 PRIORITÉ BASSE (ignorer sauf volume anormal) :
 - Notifications de services (New Relic, Sentry, Zapier, Salesforce, AWS, Datadog...)
 - Newsletters, marketing, invitations événements
-- Notifications GitHub/GitLab (PR merged, CI failed...)
+- Notifications GitHub (PR merged, CI failed...)
 - Emails via mailing lists tech@, salesforce@, aws@
 
-Pour détecter les notifications automatiques, regarde ces signaux :
+Pour détecter les notifications automatiques :
 - From contient "via", "noreply", "no-reply", "notifications", "alert", "support@"
 - From est un domaine de service connu (zapier, newrelic, sentry, salesforce, github, aws, datadog, retool, airtable, notion, apple, google)
 - Subject contient [ALERT], "exception", "error", "script exception", "your job", "daily report"
-- Subject commence par "Invitation:", "Updated invitation:", "Invitation mise à jour:", "Accepted:", "Accepté:", "Declined:", "Refusé:", "Accepté provisoirement:", "Tentatively accepted:" — ce sont des emails de calendrier Google, les IGNORER complètement (l'info est déjà dans le calendrier)
+- Subject commence par "Invitation:", "Updated invitation:", "Invitation mise à jour:", "Accepted:", "Accepté:", "Declined:", "Refusé:", "Accepté provisoirement:", "Tentatively accepted:" — IGNORER (info déjà dans le calendrier)
 - To est une adresse de groupe/alias (tech@, aws@, salesforce@, privacy@)
 - labelIds contient CATEGORY_FORUMS ou CATEGORY_PROMOTIONS (= pas CATEGORY_PERSONAL)
 
-Quand il y a beaucoup de notifications du même type (ex: 10 Salesforce exceptions), les regrouper en une seule ligne : "Salesforce: 10 exceptions Apex (Ringover, ContactTrigger...)" plutôt que lister chacune.
+Quand il y a beaucoup de notifications du même type, les regrouper : "Salesforce: 10 exceptions Apex (Ringover, ContactTrigger...)" plutôt que lister chacune.
 
-## Étape 6 — Résumé
+## Étape 6 — GitHub & Board — SKIP si fenêtre < 3h
 
-Une fois TOUTES les données collectées, rédige un résumé structuré en texte simple (pas de markdown riche).
+### 6a — PRs mergées sur master
 
-RÈGLES DE FORMAT :
-- Ne PAS inclure les sections qui n'ont rien d'important à signaler. Si une section serait vide ou triviale, l'omettre.
-- Grouper les décisions au maximum plutôt que lister individuellement. Prioriser les décisions au niveau entreprise.
-- Les informations des 1:1 Notion doivent être intégrées dans les sections existantes (CE QUI S'EST PASSÉ, DÉCISIONS EN ATTENTE), pas listées séparément.
-- Ne PAS lister les réunions du calendrier. Le calendrier sert uniquement à trouver les transcripts/notes Gemini. Dans le résumé, ne mentionner que le contenu extrait des transcripts et notes, pas la liste des meetings de la journée.
+```bash
+gh pr list --repo finspot/pretto --state merged --search "merged:>YYYY-MM-DD" --limit 30 --json title,url,mergedAt,author
+```
 
-Sections possibles (n'inclure que celles qui ont du contenu pertinent) :
+Grouper par auteur. Identifier les PRs qui touchent à des sujets stratégiques (architecture, sécurité, migrations, nouvelles features majeures). Ignorer le bruit (typos, bumps, petits fix).
+
+### 6b — Board Produit-Tech
+
+Utilise `mcp__claude_ai_Notion__notion-search` avec :
+- data_source_url = `collection://295d2e40-ea50-806b-9453-000bd76fc8de`
+- query = termes pertinents (noms de projets en cours, batch actif)
+
+Regarde l'état des cartes actives : ce qui a bougé, ce qui est bloqué, ce qui est terminé.
+
+## Étape 7 — Synthèse stratégique
+
+Une fois TOUTES les données collectées, AVANT de rédiger le résumé, fais une passe de synthèse :
+
+1. **Recoupe les sources** : si un sujet apparaît dans un transcript ET dans Slack ET dans un 1:1, c'est un sujet important. Regroupe les infos.
+
+2. **Identifie les initiatives en cours** : Eclipse, Arthur, migrations, core-tech, recrutement, etc. Pour chaque initiative, rassemble tout ce qui la concerne (PRs, discussions, blocages, avancées).
+
+3. **Évalue les risques** : cartes bloquées, deadlines proches, personnes surchargées ou silencieuses, sujets qui traînent, tensions détectées.
+
+4. **Vérifie les open items du gather précédent** : pour chaque item "OUVERT" du dernier gather, cherche dans les données collectées s'il y a eu du mouvement.
+
+### Format du résumé
+
+Rédige un résumé structuré en texte simple. N'inclure que les sections qui ont du contenu.
 
 ```
-RÉSUMÉ — du [date début] au [date fin]
-=========================================
+RÉSUMÉ — du [date début HH:mm] au [date fin HH:mm]
+=====================================================
 
-CE QUI S'EST PASSÉ
-------------------
-- [bullet points des événements, discussions Slack, changements Notion, points importants des 1:1]
+REQUIERT TON ACTION
+-------------------
+[Ce que tu dois faire toi-même. Décisions à prendre, reviews à faire,
+messages à envoyer, arbitrages à rendre. Chaque item = qui attend quoi de toi.]
+
+SUIVI (depuis le dernier gather)
+--------------------------------
+[Pour chaque item "OUVERT" du gather précédent :]
+- [sujet] → [RÉSOLU : comment] ou [AVANCÉ : détail] ou [TOUJOURS OUVERT]
+
+PAR INITIATIVE
+--------------
+[Regrouper par projet/initiative, pas par source. Pour chaque initiative :]
+
+  ECLIPSE
+  - Avancées : [PRs, discussions, décisions]
+  - Blocages : [ce qui coince]
+  - Prochaines étapes : [ce qui est prévu]
+
+  ARTHUR
+  - ...
+
+  CORE-TECH
+  - ...
+
+  [etc.]
+
+ÉQUIPE
+------
+[Signaux sur les personnes : qui est bloqué, qui est surchargé,
+qui est silencieux, feedback remontés en 1:1, sujets RH]
 
 DÉCISIONS PRISES
 ----------------
-- [grouper les décisions par thème, prioriser les décisions entreprise]
+[Décisions actées pendant la période, groupées par thème.
+Qui a décidé, quoi, contexte minimal.]
 
-DÉCISIONS EN ATTENTE
---------------------
-- [sujets ouverts, questions non résolues, actions à suivre, blocages remontés dans les 1:1]
+RADAR BUSINESS
+--------------
+[Signaux captés hors du périmètre tech direct. Organisé par domaine :]
 
-EMAILS IMPORTANTS (internes / écrits à la main)
-------------------------------------------------
-- [emails haute priorité avec expéditeur, sujet et résumé du contenu]
+  BANQUES & PARTENAIRES
+  - [changements de critères, nouveaux quotas, problèmes de connecteurs]
 
-NOTIFICATIONS & ALERTES (résumé groupé)
-----------------------------------------
-- [regrouper par source, ne mentionner que si volume anormal ou incident non résolu]
+  CLIENTS & PRODUIT
+  - [bugs remontés par les EC, feedback utilisateurs, problèmes d'UX]
+
+  SALES & PIPELINE
+  - [résultats notables, problèmes de qualité des leads, tendances]
+
+  MARCHÉ
+  - [annonces, mouvements concurrents, régulation]
+
+[Ne pas inclure les sous-sections vides. Ne garder que les signaux
+qui méritent l'attention d'un CTO : impacts potentiels sur la tech,
+la roadmap produit, ou les décisions stratégiques.]
+
+INCIDENTS & ALERTES
+-------------------
+[Incidents (New Relic, pannes), volumes anormaux (SF exceptions),
+alertes non résolues. Regroupé par source.]
+
+OUVERT
+------
+[Tout ce qui reste en suspens et devra être suivi au prochain gather.
+Actions assignées à d'autres, sujets non tranchés, deadlines à venir.
+Ce sont les items que le prochain gather reprendra dans "SUIVI".]
 ```
 
-Sois concis mais complet. Privilégie les informations actionnables.
+RÈGLES :
+- "REQUIERT TON ACTION" est TOUJOURS la première section quand elle a du contenu
+- "OUVERT" est TOUJOURS la dernière section — c'est le pont vers le prochain gather
+- "PAR INITIATIVE" est le coeur du résumé — c'est là que la vision stratégique se construit
+- Ne PAS lister les réunions du calendrier. Ne mentionner que le CONTENU extrait des transcripts.
+- Ne PAS séparer les infos par source. Regrouper par sujet/initiative.
+- Être concis mais complet. Chaque bullet = une info actionnable ou un fait notable.
 
-## Étape 7 — Écriture dans la page Notion "Gathered" + sous-pages sources
+## Étape 8 — Écriture dans la page Notion "Gathered" + sous-pages sources
 
 Après avoir affiché le résumé à l'utilisateur, écris le résumé ET les données brutes dans Notion.
 
-### 7a — Créer les sous-pages sources
+### 8a — Créer les sous-pages sources
 
 Pour CHAQUE source collectée ayant du contenu, crée une sous-page sous la page Gathered (ID : `325d2e40-ea50-8194-8e49-e4f2926780ec`) avec `mcp__claude_ai_Notion__notion-create-pages` :
 
-```json
-{
-  "parent": {"page_id": "325d2e40-ea50-8194-8e49-e4f2926780ec"},
-  "pages": [
-    {
-      "properties": {"title": "YYYY-MM-DD HH:mm — <type source> — <nom>"},
-      "icon": "<emoji>",
-      "content": "<contenu brut>"
-    }
-  ]
-}
-```
-
-Types de sous-pages à créer (une par source, regrouper quand c'est logique) :
+Types de sous-pages à créer :
 
 1. **Transcripts Gemini** (icône : "📝") — UNE sous-page par transcript/notes de meeting
    - Titre : `YYYY-MM-DD HH:mm — Transcript — <nom du meeting>`
-   - Contenu : le texte complet du transcript tel que lu dans le PDF (notes Gemini + transcription verbatim si disponible)
+   - Contenu : texte complet du transcript
 
 2. **Slack** (icône : "💬") — UNE sous-page regroupant tous les résultats Slack
    - Titre : `YYYY-MM-DD HH:mm — Slack`
-   - Contenu : tous les messages récupérés, organisés par canal avec les threads lus. Format :
-     ```
-     ### #canal-name
-     - [timestamp] @user : message
-     - [timestamp] @user : message
-       Thread (N replies) :
-       - @user : reply
-       - @user : reply
-     ```
+   - Contenu : messages organisés par canal avec threads
 
-3. **Gmail** (icône : "📧") — UNE sous-page regroupant les emails importants lus
+3. **Gmail** (icône : "📧") — UNE sous-page regroupant les emails importants
    - Titre : `YYYY-MM-DD HH:mm — Gmail`
-   - Contenu : pour chaque email lu avec gmail_read_message, inclure From, To, Subject, Date et le body. Pour les emails non lus (notifications), lister juste le sujet groupé.
+   - Contenu : emails haute priorité (From, To, Subject, Date, body) + notifications groupées
 
-4. **Notion 1:1** (icône : "📓") — UNE sous-page si des pages 1:1 ont été consultées
+4. **Notion 1:1** (icône : "📓") — UNE sous-page si des 1:1 consultés
    - Titre : `YYYY-MM-DD HH:mm — Notion 1:1`
-   - Contenu : les extraits pertinents des pages 1:1 consultées (dernière entrée de chaque 1:1)
+   - Contenu : extraits pertinents des 1:1
 
-5. **Calendar** (icône : "📅") — UNE sous-page avec la liste brute des events
+5. **Calendar** (icône : "📅") — UNE sous-page avec les events
    - Titre : `YYYY-MM-DD HH:mm — Calendar`
-   - Contenu : dump JSON simplifié des events (summary, start, end, attendees, hasAttachments)
+   - Contenu : events simplifiés (summary, start, end, attendees, hasAttachments)
 
-NE PAS créer de sous-page pour une source qui n'a donné aucun résultat.
+6. **GitHub** (icône : "🔀") — UNE sous-page si des PRs collectées
+   - Titre : `YYYY-MM-DD HH:mm — GitHub`
+   - Contenu : PRs mergées groupées par auteur
 
-Les sous-pages peuvent être créées en parallèle dans un seul appel à `notion-create-pages` (multi-pages).
+7. **Radar Business** (icône : "📡") — UNE sous-page si des signaux business captés
+   - Titre : `YYYY-MM-DD HH:mm — Radar Business`
+   - Contenu : tous les messages business récupérés, organisés par canal/domaine
 
-### 7b — Écrire le résumé dans la page principale
+NE PAS créer de sous-page pour une source sans résultat. Créer en parallèle.
 
-Utilise `mcp__claude_ai_Notion__notion-fetch` pour récupérer le contenu actuel de la page, puis `mcp__claude_ai_Notion__notion-update-page` pour PREPEND (ajouter AU DESSUS du contenu existant) une nouvelle entrée.
+### 8b — Écrire le résumé dans la page principale
 
-Format de chaque entrée :
+Utilise `mcp__claude_ai_Notion__notion-fetch` pour récupérer le contenu actuel, puis `mcp__claude_ai_Notion__notion-update-page` pour PREPEND.
+
+Format :
 ```
 ## <mention-date start="YYYY-MM-DD" startTime="HH:mm" timeZone="Europe/Paris"/> — Gather
 
 <details>
-<summary>Sources collectées (N sous-pages)</summary>
-	- [liste des sous-pages créées avec leur titre]
+<summary>Sources (N sous-pages)</summary>
+	- [liste des sous-pages]
 </details>
 
-[Le résumé complet en Notion markdown — utiliser ### pour les sous-sections, **gras** pour les noms, - pour les listes]
+[Le résumé complet en Notion markdown]
 
 ---
 ```
 
-L'entrée la plus récente doit toujours être en haut de la page. La date/heure dans le heading est l'heure actuelle (= le moment où le gather est exécuté), ce qui permet au prochain gather sans argument de reprendre depuis cette heure.
+L'entrée la plus récente est toujours en haut. La date/heure est l'heure d'exécution du gather.
