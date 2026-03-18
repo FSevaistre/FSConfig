@@ -292,7 +292,28 @@ gh pr list --repo finspot/pretto --state merged --search "merged:>YYYY-MM-DD" --
 
 Grouper par auteur. Identifier les PRs qui touchent à des sujets stratégiques (architecture, sécurité, migrations, nouvelles features majeures). Ignorer le bruit (typos, bumps, petits fix).
 
-### 6b — Board Produit-Tech
+### 6b — Mes PRs en attente
+
+Récupère les PRs qui nécessitent ton attention :
+
+```bash
+# PRs où je suis assigné en reviewer (en attente de ma review)
+gh pr list --repo finspot/pretto --search "review-requested:FSevaistre" --state open --json number,title,url,author,createdAt,additions,deletions
+
+# Mes PRs ouvertes en attente de review
+gh pr list --repo finspot/pretto --author FSevaistre --state open --json number,title,url,createdAt,additions,deletions,reviewDecision
+```
+
+Pour chaque PR trouvée :
+- Si `reviewDecision` est "APPROVED" ou "CHANGES_REQUESTED" → la review est déjà faite, ne PAS la mettre dans REQUIERT TON ACTION
+- Si review-requested mais la PR a déjà été reviewed/approved par d'autres et n'a plus besoin de ta review → ne PAS la mettre
+- Seules les PRs réellement en attente de ton action apparaissent dans le résumé
+
+Intègre les résultats dans le résumé :
+- PRs en attente de ma review → section REQUIERT TON ACTION (seulement celles pas encore reviewées)
+- Mes PRs en attente → section OUVERT avec le statut (draft, en attente de review, changes requested)
+
+### 6c — Board Produit-Tech
 
 Utilise `mcp__claude_ai_Notion__notion-search` avec :
 - data_source_url = `collection://295d2e40-ea50-806b-9453-000bd76fc8de`
@@ -323,7 +344,10 @@ RÉSUMÉ — du [date début HH:mm] au [date fin HH:mm]
 REQUIERT TON ACTION
 -------------------
 [Ce que tu dois faire toi-même. Décisions à prendre, reviews à faire,
-messages à envoyer, arbitrages à rendre. Chaque item = qui attend quoi de toi.]
+messages à envoyer, arbitrages à rendre. Chaque item = qui attend quoi de toi.
+IMPORTANT pour les reviews : ne lister que les PRs réellement en attente de
+ta review (vérifiées via gh pr list). Si une PR a déjà été mergée, approved,
+ou reviewée, ne PAS la mettre ici.]
 
 SUIVI (depuis le dernier gather)
 --------------------------------
