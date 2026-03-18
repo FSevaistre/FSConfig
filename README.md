@@ -4,13 +4,15 @@ Configuration de ma machine de dev.
 
 ## Disclaimer
 
-Ce repo est optimise pour mon workflow chez Pretto. Les commandes Claude Code (`/1to1`, `/gather`, `/pr`) s'appuient sur les outils internes Pretto : Slack, Notion, Gmail, GitHub (org finspot), et le Board Produit-Tech Notion.
+Ce repo est optimise pour mon workflow chez Pretto. Les commandes Claude Code (`/1to1`, `/1to1-wrap-up`, `/gather`, `/morning-coffee`, `/pr`) s'appuient sur les outils internes Pretto : Slack, Notion, Gmail, GitHub (org finspot), Google Calendar, Google Drive, et le Board Produit-Tech Notion.
 
 Si tu forks ce repo, voici ce qu'il faut adapter :
 
 - `claude/team.json` -- arborescence de l'equipe (noms, Slack IDs, emails, GitHub handles, Notion user IDs, pages 1:1). A mettre a jour quand quelqu'un arrive, part, ou change d'equipe.
 - `claude/commands/1to1.md` -- references aux canaux Slack, au board Notion, au repo GitHub. A adapter a ton org.
+- `claude/commands/1to1-wrap-up.md` -- meme dependances que 1to1 + Google Calendar et Drive pour les transcripts.
 - `claude/commands/gather.md` -- canaux Slack par priorite, ID Slack de l'utilisateur, logique de tri des emails. Tres specifique a mon role de CTO chez Pretto.
+- `claude/commands/morning-coffee.md` -- agregat de /1to1, /gather, Google Calendar et Board Notion.
 - `claude/skills/pr/SKILL.md` -- commandes de test et lint specifiques au monorepo Pretto (make rspec, rubocop, etc.).
 
 Les fichiers generiques (vim, tmux, git, shell, keyboard) fonctionnent tels quels sur n'importe quelle machine Ubuntu/Debian.
@@ -38,7 +40,7 @@ FSConfig/
 ├── claude/
 │   ├── settings.json      # Preferences Claude Code
 │   ├── team.json           # Arborescence equipe (IDs Slack, Notion, GitHub, emails)
-│   ├── commands/           # Slash commands custom (/1to1, /gather, /gdrive)
+│   ├── commands/           # Slash commands custom (/1to1, /1to1-wrap-up, /gather, /morning-coffee, /gdrive, /pleo)
 │   └── skills/             # Skills auto-detectes (/pr, /transcribe)
 ├── keyboard/
 │   └── setup.sh           # Caps Lock -> Escape
@@ -168,11 +170,17 @@ bash FSConfig/keyboard/setup.sh
 
 ### Liste des commandes disponibles
 
-`/1to1 <prenom>` -- Prepare un 1:1 avec un managee. Collecte en parallele : page 1:1 Notion, Slack (messages de la semaine), Gmail, cartes du Board Produit-Tech, PRs GitHub. Si le managee est manager, fait la meme chose pour chaque membre de son equipe et produit un briefing complet avec points d'attention et sujets a aborder. Utilise `team.json` pour les IDs.
+`/1to1 <prenom>` -- Prepare un 1:1 avec un managee. Verifie d'abord que le 1:1 precedent a ete documente (sinon telecharge le transcript et remplit la page Notion). Puis collecte en parallele : page 1:1 Notion, Slack (messages de la semaine), Gmail, cartes du Board Produit-Tech, PRs GitHub. Si le managee est manager, fait la meme chose pour chaque membre de son equipe et produit un briefing complet avec points d'attention et sujets a aborder. Publie dans Notion. Utilise `team.json` pour les IDs.
 
-`/gather [date]` -- Rassemble tout ce qui s'est passe depuis une date (defaut : aujourd'hui). Parcourt le calendrier Google + transcripts Gemini, Notion (1:1, pages recentes), Slack (canaux par priorite), Gmail (tri auto notifications vs emails importants). Produit un resume structure.
+`/1to1-wrap-up [prenom]` -- Wrap-up d'un 1:1 recent. Cherche le 1:1 le plus recent dans l'agenda (dernières 4h ou journee), telecharge le transcript Gemini, extrait les infos par section du template et met a jour la page Notion. Ne touche pas aux sections deja remplies. Si l'entree du jour n'existe pas, la cree avec le bon template.
+
+`/gather [date]` -- Rassemble tout ce qui s'est passe depuis une date (defaut : reprend depuis le dernier gather). Parcourt le calendrier Google + transcripts Gemini, Notion (1:1, pages recentes), Slack (canaux par priorite), Gmail (tri auto notifications vs emails importants), GitHub (PRs mergees + PRs en attente de review), Board Produit-Tech, radar business (canaux hors perimetre direct). Produit un resume strategique structure et le publie dans Notion.
+
+`/morning-coffee` -- Briefing du matin. Agregat de l'agenda du jour, detection et preparation des 1:1, /gather depuis le dernier gather, plan d'action Notion. Calcule le temps libre et suggere comment l'utiliser.
 
 `/gdrive <url_ou_id>` -- Telecharge un fichier depuis Google Drive via le script `~/.local/bin/gdrive-dl`.
+
+`/pleo` -- Recupere les recus manquants sur Pleo depuis Gmail et les portails fournisseurs, puis les uploade.
 
 ### Liste des skills (detection automatique)
 
