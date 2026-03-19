@@ -298,19 +298,32 @@ Récupère les PRs qui nécessitent ton attention :
 
 ```bash
 # PRs où je suis assigné en reviewer (en attente de ma review)
-gh pr list --repo finspot/pretto --search "review-requested:FSevaistre" --state open --json number,title,url,author,createdAt,additions,deletions
+gh pr list --repo finspot/pretto --search "review-requested:FSevaistre" --state open --json number,title,url,author,createdAt,additions,deletions,reviewDecision,state
 
 # Mes PRs ouvertes en attente de review
-gh pr list --repo finspot/pretto --author FSevaistre --state open --json number,title,url,createdAt,additions,deletions,reviewDecision
+gh pr list --repo finspot/pretto --author FSevaistre --state open --json number,title,url,createdAt,additions,deletions,reviewDecision,state
 ```
 
-Pour chaque PR trouvée :
-- Si `reviewDecision` est "APPROVED" ou "CHANGES_REQUESTED" → la review est déjà faite, ne PAS la mettre dans REQUIERT TON ACTION
-- Si review-requested mais la PR a déjà été reviewed/approved par d'autres et n'a plus besoin de ta review → ne PAS la mettre
-- Seules les PRs réellement en attente de ton action apparaissent dans le résumé
+IMPORTANT — Vérification OBLIGATOIRE avant d'inclure une PR dans le résumé :
+
+Pour CHAQUE PR trouvée par les commandes ci-dessus, vérifie son état réel avec :
+```bash
+gh pr view <number> --repo finspot/pretto --json state,reviewDecision,reviews,mergedAt,closedAt
+```
+
+Critères d'EXCLUSION (ne PAS mettre dans REQUIERT TON ACTION) :
+- `state` est "MERGED" ou "CLOSED" → la PR n'existe plus, l'ignorer complètement
+- `reviewDecision` est "APPROVED" → déjà approuvée, pas besoin de review
+- `reviewDecision` est "CHANGES_REQUESTED" et les changes requested ne viennent pas de moi → quelqu'un d'autre a déjà reviewé
+- `reviews` contient une review de FSevaistre → j'ai déjà reviewé, ne PAS redemander
+- La PR a été mergée entre-temps (vérifier `mergedAt`) → l'ignorer
+
+Seules les PRs réellement OPEN + pas encore reviewées par moi + en attente de mon action apparaissent dans le résumé.
+
+NE JAMAIS inclure une PR dans REQUIERT TON ACTION sans avoir vérifié son état via `gh pr view`. Si la commande échoue ou la PR n'existe pas, l'ignorer.
 
 Intègre les résultats dans le résumé :
-- PRs en attente de ma review → section REQUIERT TON ACTION (seulement celles pas encore reviewées)
+- PRs en attente de ma review (vérifiées) → section REQUIERT TON ACTION
 - Mes PRs en attente → section OUVERT avec le statut (draft, en attente de review, changes requested)
 
 ### 6c — Board Produit-Tech

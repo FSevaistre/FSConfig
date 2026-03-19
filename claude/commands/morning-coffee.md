@@ -1,6 +1,6 @@
 ---
 description: Briefing du matin - agenda, 1:1 du jour, gather, plan d'action, temps disponible
-allowed-tools: Bash, Read, Write, Glob, Grep, Agent, Skill, mcp__claude_ai_Google_Calendar__gcal_list_events, mcp__claude_ai_Google_Calendar__gcal_get_event, mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Slack__slack_search_public_and_private, mcp__claude_ai_Slack__slack_read_thread, mcp__claude_ai_Gmail__gmail_search_messages, mcp__claude_ai_Gmail__gmail_read_message
+allowed-tools: Bash, Read, Write, Glob, Grep, Agent, Skill, mcp__claude_ai_Google_Calendar__gcal_list_events, mcp__claude_ai_Google_Calendar__gcal_get_event, mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Slack__slack_search_public_and_private, mcp__claude_ai_Slack__slack_read_thread, mcp__claude_ai_Slack__slack_send_message, mcp__claude_ai_Gmail__gmail_search_messages, mcp__claude_ai_Gmail__gmail_read_message
 ---
 
 Briefing du matin pour le CTO. L'objectif est de preparer la journee en 1 seul endroit.
@@ -129,3 +129,20 @@ REGLES :
 
 Affiche le briefing directement dans la console. NE PAS publier dans Notion.
 Le /gather et les /1to1 publient deja leurs resultats dans Notion -- le morning coffee est juste un agregat pour la console.
+
+## Etape 7 — Envoi par Slack DM
+
+Envoie le briefing en DM Slack a l'utilisateur (slack_id : U3KR4PTDX) avec `mcp__claude_ai_Slack__slack_send_message`.
+
+Le message principal contient l'AGENDA DU JOUR (liste des reunions + temps libre + blocs libres).
+Les sections suivantes sont envoyees en replies dans le thread (thread_ts du message principal) :
+1. Les 1:1 du jour (resume de chaque briefing)
+2. Le rattrapage (gather : REQUIERT TON ACTION, decisions prises, equipe)
+3. MA JOURNEE (suggestions pour les blocs libres + actions urgentes)
+
+REGLES :
+- Pas d'accents dans les messages Slack (Slack API peut les rejeter selon l'encodage)
+- Pas d'emojis unicode dans le texte (sauf si explicitement demande)
+- Utiliser le formatting Slack standard : *bold* pour les titres, - pour les listes
+- Max 4000 chars par message, decouper si necessaire
+- Ne pas envoyer les sections vides
