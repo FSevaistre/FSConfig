@@ -4,7 +4,7 @@ Configuration de ma machine de dev.
 
 ## Disclaimer
 
-Ce repo est optimise pour mon workflow chez Pretto. Les commandes Claude Code (`/1to1`, `/1to1-wrap-up`, `/gather`, `/morning-coffee`, `/pr`) s'appuient sur les outils internes Pretto : Slack, Notion, Gmail, GitHub (org finspot), Google Calendar, Google Drive, et le Board Produit-Tech Notion.
+Ce repo est optimise pour mon workflow chez Pretto. Les commandes Claude Code (`/1to1`, `/1to1-wrap-up`, `/gather`, `/morning-coffee`, `/fix-sentry`, `/pr`) s'appuient sur les outils internes Pretto : Slack, Notion, Gmail, GitHub (org finspot), Google Calendar, Google Drive, Sentry, et le Board Produit-Tech Notion.
 
 Si tu forks ce repo, voici ce qu'il faut adapter :
 
@@ -40,7 +40,7 @@ FSConfig/
 ├── claude/
 │   ├── settings.json      # Preferences Claude Code
 │   ├── team.json           # Arborescence equipe (IDs Slack, Notion, GitHub, emails)
-│   ├── commands/           # Slash commands custom (/1to1, /1to1-wrap-up, /gather, /morning-coffee, /gdrive, /pleo)
+│   ├── commands/           # Slash commands custom (/1to1, /1to1-wrap-up, /gather, /morning-coffee, /gdrive, /pleo, /fix-sentry)
 │   └── skills/             # Skills auto-detectes (/pr, /transcribe)
 ├── keyboard/
 │   └── setup.sh           # Caps Lock -> Escape
@@ -181,6 +181,8 @@ bash FSConfig/keyboard/setup.sh
 `/gdrive <url_ou_id>` -- Telecharge un fichier depuis Google Drive via le script `~/.local/bin/gdrive-dl`.
 
 `/pleo` -- Recupere les recus manquants sur Pleo depuis Gmail et les portails fournisseurs, puis les uploade.
+
+`/fix-sentry [options]` -- Recupere les top erreurs Sentry non assignees sur les projets backend (finspot-api, pretto-api, oleen-backend), analyse les stacktraces, classe chaque issue (code-fix, infra, noise), et cree une PR draft par fix avec le lien Sentry dans la description. Par defaut : 10 erreurs, 24h. Accepte des arguments pour personnaliser (ex: `/fix-sentry 5 erreurs sur pretto-api 48h`).
 
 ### Liste des skills (detection automatique)
 
