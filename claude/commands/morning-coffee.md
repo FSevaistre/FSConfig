@@ -1,6 +1,6 @@
 ---
 description: Briefing du matin - agenda, 1:1 du jour, gather, plan d'action, temps disponible
-allowed-tools: Bash, Read, Write, Glob, Grep, Agent, Skill, mcp__claude_ai_Google_Calendar__gcal_list_events, mcp__claude_ai_Google_Calendar__gcal_get_event, mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Slack__slack_search_public_and_private, mcp__claude_ai_Slack__slack_read_thread, mcp__claude_ai_Slack__slack_send_message, mcp__claude_ai_Gmail__gmail_search_messages, mcp__claude_ai_Gmail__gmail_read_message
+allowed-tools: Bash, Read, Write, Glob, Grep, Agent, Skill, mcp__claude_ai_Google_Calendar__gcal_list_events, mcp__claude_ai_Google_Calendar__gcal_get_event, mcp__claude_ai_Notion__notion-fetch, mcp__claude_ai_Notion__notion-search, mcp__claude_ai_Notion__notion-update-page, mcp__claude_ai_Notion__notion-create-pages, mcp__claude_ai_Slack__slack_search_public_and_private, mcp__claude_ai_Slack__slack_read_thread, mcp__claude_ai_Slack__slack_send_message, mcp__claude_ai_Slack__slack_send_message_draft, mcp__claude_ai_Gmail__gmail_search_messages, mcp__claude_ai_Gmail__gmail_read_message
 ---
 
 Briefing du matin pour le CTO. L'objectif est de preparer la journee en 1 seul endroit.
@@ -47,7 +47,9 @@ Lance `/gather` via l'outil Skill (sans argument = reprise automatique depuis le
 
 Attends le resultat avant de continuer.
 
-## Etape 4 — Plan d'action
+## Etape 4 — Plan d'action + reconciliation avec le gather
+
+### 4a — Recuperer le plan d'action
 
 Recupere le plan d'action depuis Notion :
 - Data source : `collection://c4f17e42-c412-4b75-8f8e-588b9b7e5bea`
@@ -55,12 +57,37 @@ Recupere le plan d'action depuis Notion :
 
 Filtre les cartes qui ne sont PAS done/terminées. Pour chaque carte active, note :
 - Titre
-- Statut
-- Priorite (si disponible)
-- Date limite (si disponible)
+- Statut (Done / Not started / In progress)
+- Date limite (Due Date)
 - Owner / assignee
+- Timebox (heures)
 
 Si la recherche ne retourne pas assez de resultats, utilise `mcp__claude_ai_Notion__notion-fetch` directement sur le board (`f5b2bbdd-96c8-4431-bdbb-29cc6acb9121`) pour voir la structure.
+
+### 4b — Reconcilier chaque action du gather avec le plan d'action
+
+Pour CHAQUE item de la section "REQUIERT TON ACTION" du gather, cherche si une carte correspondante existe deja dans le plan d'action (match par sujet, pas necessairement par titre exact — utiliser le bon sens).
+
+Applique ces regles :
+
+1. **Carte existe + statut Done** → SUPPRIMER de la liste des actions. C'est deja fait. Ne pas le mentionner dans le briefing.
+
+2. **Carte existe + Due Date = aujourd'hui (ou pas de date)** → GARDER dans le briefing. Mentionner "(plan d'action)" a cote pour indiquer que c'est deja tracke.
+
+3. **Carte existe + Due Date dans le futur (apres aujourd'hui)** → SUPPRIMER de la liste des actions du jour. On fera plus tard. Ne pas le mentionner dans le briefing.
+
+4. **Carte n'existe PAS** → CREER une nouvelle carte dans le plan d'action :
+   - Data source : `collection://c4f17e42-c412-4b75-8f8e-588b9b7e5bea`
+   - Properties :
+     - Name : titre descriptif court de l'action
+     - Done : "Not started"
+     - Due Date : date du jour
+     - Timebox : estimation en heures (0.5 pour un truc rapide, 1-2 pour du travail de fond)
+   - Mentionner "(ajoute dans le plan d'action)" a cote dans le briefing.
+
+IMPORTANT : utiliser `mcp__claude_ai_Notion__notion-create-pages` avec le parent `data_source_id: c4f17e42-c412-4b75-8f8e-588b9b7e5bea` pour creer les cartes. Bien utiliser les bons noms de proprietes du schema : "Name" (title), "Done" (status), "Timebox (heures)" (number), et les proprietes de date au format "date:Due Date:start", "date:Due Date:is_datetime".
+
+Le resultat de cette reconciliation est la liste finale des actions du jour : uniquement les items pertinents pour AUJOURD'HUI, chacun annote de son origine.
 
 ## Etape 5 — Synthese Morning Coffee
 
@@ -94,12 +121,20 @@ AGENDA DU JOUR
 
 RATTRAPAGE (gather)
 -------------------
-[Resume du /gather — reprendre les sections REQUIERT TON ACTION et OUVERT]
+[Resume du /gather — UNIQUEMENT les actions qui ont survecu a la
+reconciliation avec le plan d'action (etape 4b). Chaque item est annote :]
+
+- [action 1] (plan d'action)          ← etait deja dans le plan, due aujourd'hui
+- [action 2] (ajoute dans le plan d'action)  ← n'existait pas, carte creee
+- [action 3] (plan d'action)          ← idem
+
+[Les items Done ou prevus dans le futur ne sont PAS listes ici.]
 
 PLAN D'ACTION
 -------------
-[Cartes actives du board, triees par priorite :]
-- [carte 1] — statut, deadline si applicable
+[Cartes actives du board dues aujourd'hui ou sans date, triees par priorite.
+Ne pas re-lister les items deja dans RATTRAPAGE.]
+- [carte 1] — statut, timebox si dispo
 - [carte 2] — statut
 ...
 
@@ -114,8 +149,9 @@ MA JOURNEE
   → Suggestion : [autre action]
 
   Actions urgentes a caser :
-  - [items REQUIERT TON ACTION du gather]
-  - [cartes plan d'action avec deadline proche]
+  - [items REQUIERT TON ACTION ayant survecu la reconciliation]
+  - [cartes plan d'action dues aujourd'hui]
+  - [items marques "ajoute dans le plan d'action"]
 ```
 
 REGLES :
