@@ -177,8 +177,7 @@ Les sections suivantes sont envoyees en replies dans le thread (thread_ts du mes
 3. MA JOURNEE (suggestions pour les blocs libres + actions urgentes)
 
 REGLES :
-- Pas d'accents dans les messages Slack (Slack API peut les rejeter selon l'encodage)
-- Pas d'emojis unicode dans le texte (sauf si explicitement demande)
+- Pas d'emojis unicode dans le texte (sauf si explicitement demandé)
 - Utiliser le formatting Slack standard : *bold* pour les titres, - pour les listes
 - Max 4000 chars par message, decouper si necessaire
 - Ne pas envoyer les sections vides
