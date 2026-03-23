@@ -33,7 +33,9 @@ Voici les sources de factures pour les fournisseurs habituels de Pretto :
 | Cloudinary | Email (pièce jointe) | Télécharger depuis Gmail Chrome |
 | New Relic | Email (pièce jointe) | Télécharger depuis Gmail Chrome |
 | Microsoft/Azure | Portail Azure | Ouvrir https://portal.azure.com > Facturation > Historique des paiements, cliquer l'icône download |
+| ConvertAPI | Email (Paddle) + headless Chrome | Chercher dans Gmail `from:convertapi subject:receipt`. Extraire le lien `my.paddle.com/receipt/...` du body. Générer le PDF via headless Chrome : `google-chrome --headless --disable-gpu --no-sandbox --print-to-pdf=/tmp/<nom>.pdf "<url_paddle>"` (le site Paddle est bloqué par l'extension Chrome, mais headless Chrome y accède sans problème) |
 | OpenAI/ChatGPT | Email (Stripe) | Chercher dans Gmail `from:openai receipt`. Interface ChatGPT ne propose pas de billing history |
+| Algolia | Email (pièce jointe) | Chercher dans Gmail `from:algolia subject:invoice`. Télécharger la PJ depuis Gmail Chrome (hover sur la PJ, cliquer download) |
 | Twilio | Console billing (receipt PDF) | Naviguer vers `https://console.twilio.com/us1/billing/manage-billing/billing-overview?frameUrl=%2Fconsole%2Fbilling%2Fapi%2Freceipt%3Fm%3D<MM>%26y%3D<YYYY>%26x-target-region%3Dus1` (remplacer MM et YYYY par le mois/annee). IMPORTANT : switcher sur le sous-compte "oleen-mortgagors-login-verify" dans le dropdown en haut de page. Le lien telecharge directement un PDF |
 
 ### 4. Télécharger et convertir les PDFs
@@ -47,6 +49,12 @@ pdftoppm -png -r 200 -singlefile /tmp/<nom>.pdf /tmp/<nom>
 Pour les pièces jointes Gmail : ouvrir l'email dans Chrome, scroller jusqu'à la PJ, hover pour faire apparaître le bouton download, cliquer, puis :
 ```bash
 pdftoppm -png -r 200 -singlefile ~/Downloads/<fichier>.pdf /tmp/<nom>
+```
+
+Pour les factures Paddle (ConvertAPI, etc.) dont le site est bloqué par l'extension Chrome, utiliser headless Chrome pour générer un PDF depuis l'URL du receipt :
+```bash
+google-chrome --headless --disable-gpu --no-sandbox --print-to-pdf=/tmp/<nom>.pdf "<url_paddle_receipt>"
+pdftoppm -png -r 200 -singlefile /tmp/<nom>.pdf /tmp/<nom>
 ```
 
 ### 5. Démarrer un serveur HTTP CORS local
@@ -105,3 +113,4 @@ Pour chaque dépense avec un reçu disponible :
 - L'extension Chrome peut se déconnecter : si un screenshot échoue, retenter avec tabs_context_mcp puis réessayer
 - Ne jamais utiliser le forward Pleo (forward@fetch.pleo.io) -- ça ne marche pas
 - Toujours vérifier le fichier téléchargé avec `file <path>` pour s'assurer que c'est bien un PDF avant de convertir
+- Ne pas chercher les factures Microsoft de moins de 8 € (les petits prélèvements Microsoft type Copilot/M365 n'ont pas de reçu facilement récupérable). Les lister dans le bilan final comme "ignoré".
