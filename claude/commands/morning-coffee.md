@@ -37,6 +37,31 @@ Lancer EN PARALLELE (meme message, plusieurs tool calls) :
 
 Integrer les absences dans la synthese finale (section ABSENCES DE LA SEMAINE) et dans le message Slack principal.
 
+## Etape 1ter — Wrap-up des 1:1 de la veille (si necessaire)
+
+Avant de preparer les 1:1 d'aujourd'hui, verifier que ceux d'hier ont ete documentes.
+
+1. Recuperer les events d'HIER avec `mcp__claude_ai_Google_Calendar__gcal_list_events` :
+   - timeMin = hier 00:00:00
+   - timeMax = hier 23:59:59
+   - timeZone = Europe/Paris
+   - condenseEventDetails = false
+
+2. Identifier les 1:1 d'hier avec un managee (meme logique que l'etape 2 : titre contient "1:1", "1/1", ou prenom d'un managee).
+
+3. Pour chaque 1:1 trouve, verifier si la page Notion 1:1 du managee (`notion_1to1_page`) a une entree datee d'hier avec du contenu substantiel (au moins 2-3 sections remplies) :
+   - Utiliser `mcp__claude_ai_Notion__notion-fetch` sur la page 1:1
+   - Regarder la premiere entree datee (la plus recente)
+   - Si la date correspond a hier ET le contenu est substantiel : OK, rien a faire
+   - Si la date correspond a hier mais VIDE/quasi-vide : lancer `/1to1-wrap-up <prenom>` via Skill
+   - Si pas d'entree a la date d'hier du tout : lancer `/1to1-wrap-up <prenom>` via Skill
+
+4. Lancer les wrap-ups en SEQUENTIEL (chacun telecharge un transcript et met a jour Notion).
+
+Si aucun 1:1 hier, ou si tous sont deja documentes, skip.
+
+NOTE : cette etape est BLOQUANTE — on ne prepare pas un 1:1 aujourd'hui avec un managee dont le 1:1 d'hier n'est pas documente. Ca garantit la continuite des notes.
+
 ## Etape 2 — Detecter et preparer les 1:1
 
 A partir de team.json et du calendrier (etape 1), identifier les 1:1 du jour :
