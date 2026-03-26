@@ -4,7 +4,7 @@ Configuration de ma machine de dev.
 
 ## Disclaimer
 
-Ce repo est optimise pour mon workflow chez Pretto. Les commandes Claude Code (`/1to1`, `/1to1-wrap-up`, `/gather`, `/morning-coffee`, `/fix-sentry`, `/pr`) s'appuient sur les outils internes Pretto : Slack, Notion, Gmail, GitHub (org finspot), Google Calendar, Google Drive, Sentry, et le Board Produit-Tech Notion.
+Ce repo est optimise pour mon workflow chez Pretto. Les commandes Claude Code (`/1to1`, `/1to1-wrap-up`, `/gather`, `/morning-coffee`, `/lucca`, `/fix-sentry`, `/pr`) s'appuient sur les outils internes Pretto : Slack, Notion, Gmail, GitHub (org finspot), Google Calendar, Google Drive, Sentry, Lucca (absences), et le Board Produit-Tech Notion.
 
 Si tu forks ce repo, voici ce qu'il faut adapter :
 
@@ -12,7 +12,8 @@ Si tu forks ce repo, voici ce qu'il faut adapter :
 - `claude/commands/1to1.md` -- references aux canaux Slack, au board Notion, au repo GitHub. A adapter a ton org.
 - `claude/commands/1to1-wrap-up.md` -- meme dependances que 1to1 + Google Calendar et Drive pour les transcripts.
 - `claude/commands/gather.md` -- canaux Slack par priorite, ID Slack de l'utilisateur, logique de tri des emails. Tres specifique a mon role de CTO chez Pretto.
-- `claude/commands/morning-coffee.md` -- agregat de /1to1, /gather, Google Calendar et Board Notion.
+- `claude/commands/morning-coffee.md` -- agregat de /1to1, /gather, /lucca, Google Calendar et Board Notion.
+- `claude/commands/lucca.md` -- appel API Lucca (absences). Necessite une cle API dans `~/.claude/.lucca-key` (voir setup ci-dessous). Adapter l'URL de l'instance Lucca.
 - `claude/skills/pr/SKILL.md` -- commandes de test et lint specifiques au monorepo Pretto (make rspec, rubocop, etc.).
 
 Les fichiers generiques (vim, tmux, git, shell, keyboard) fonctionnent tels quels sur n'importe quelle machine Ubuntu/Debian.
@@ -40,7 +41,7 @@ FSConfig/
 ├── claude/
 │   ├── settings.json      # Preferences Claude Code
 │   ├── team.json           # Arborescence equipe (IDs Slack, Notion, GitHub, emails)
-│   ├── commands/           # Slash commands custom (/1to1, /1to1-wrap-up, /gather, /morning-coffee, /gdrive, /pleo, /fix-sentry)
+│   ├── commands/           # Slash commands custom (/1to1, /1to1-wrap-up, /gather, /morning-coffee, /lucca, /gdrive, /pleo, /fix-sentry)
 │   └── skills/             # Skills auto-detectes (/pr, /transcribe)
 ├── keyboard/
 │   └── setup.sh           # Caps Lock -> Escape
@@ -176,7 +177,9 @@ bash FSConfig/keyboard/setup.sh
 
 `/gather [date]` -- Rassemble tout ce qui s'est passe depuis une date (defaut : reprend depuis le dernier gather). Parcourt le calendrier Google + transcripts Gemini, Notion (1:1, pages recentes), Slack (canaux par priorite), Gmail (tri auto notifications vs emails importants), GitHub (PRs mergees + PRs en attente de review), Board Produit-Tech, radar business (canaux hors perimetre direct). Produit un resume strategique structure et le publie dans Notion.
 
-`/morning-coffee` -- Briefing du matin. Agregat de l'agenda du jour, detection et preparation des 1:1, /gather depuis le dernier gather, plan d'action Notion. Calcule le temps libre et suggere comment l'utiliser.
+`/morning-coffee` -- Briefing du matin. Agregat de l'agenda du jour, absences Lucca (/lucca), detection et preparation des 1:1, /gather depuis le dernier gather, plan d'action Notion. Calcule le temps libre et suggere comment l'utiliser.
+
+`/lucca [personne] [date]` -- Consulte les absences sur Lucca. Sans argument : absences de l'equipe pour la semaine en cours. Avec un prenom : absences de cette personne. Avec une date ou "semaine prochaine" : absences de la semaine cible. La cle API Lucca est lue depuis `~/.claude/.lucca-key` (non versionne). Les `lucca_id` sont dans `team.json`.
 
 `/gdrive <url_ou_id>` -- Telecharge un fichier depuis Google Drive via le script `~/.local/bin/gdrive-dl`.
 
@@ -192,7 +195,7 @@ bash FSConfig/keyboard/setup.sh
 
 ### Fichiers de config
 
-`team.json` -- Arborescence de l'equipe tech avec pour chaque personne : nom, Slack ID, email, GitHub handle, Notion user ID, page 1:1 Notion. Utilise par `/1to1` et potentiellement d'autres commandes.
+`team.json` -- Arborescence de l'equipe tech avec pour chaque personne : nom, Slack ID, email, GitHub handle, Notion user ID, Lucca ID, page 1:1 Notion. Utilise par `/1to1`, `/lucca` et potentiellement d'autres commandes.
 
 ### Comment creer des commands et skills
 
@@ -255,8 +258,17 @@ cp ~/.bashrc ~/FSConfig/shell/bashrc
 
 Pour ajouter un nouveau logiciel a la liste, l'ajouter dans la section correspondante de ce README.
 
+**Cle API Lucca (pour /lucca et /morning-coffee) :**
+```bash
+# Generer une cle API depuis l'admin Lucca (https://your-company.ilucca.net/identity/api-keys)
+# Puis la stocker localement :
+echo "votre-cle-api" > ~/.claude/.lucca-key
+chmod 600 ~/.claude/.lucca-key
+```
+
 **Attention :** ne jamais versionner :
 - `~/.claude/config.json` (contient la cle API)
 - `~/.claude/settings.local.json` (contient des permissions avec URLs signees et emails)
+- `~/.claude/.lucca-key` (contient la cle API Lucca)
 
 Verifier qu'aucun fichier ne contient de credentials avant de commit.

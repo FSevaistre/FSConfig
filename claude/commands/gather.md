@@ -253,8 +253,10 @@ Ne garder que les résultats IMPORTANT et FYI. Lire les threads complets des ré
 ## Étape 5 — Gmail
 
 Utilise `mcp__claude_ai_Gmail__gmail_search_messages` avec :
-- q = "after:YYYY/MM/DD" (format Gmail : YYYY/M/D)
-- maxResults = 100
+- q = "after:YYYY/MM/DD -from:noreply -from:no-reply -from:notifications -from:salesforce@pretto.fr -from:zapiermail.com -from:noreply@github.com -from:noreply.notifications@trustpilot.com -from:noreply@md.getsentry.com -from:budgets@amazonaws.com -label:CATEGORY_PERSONAL" (format Gmail : YYYY/M/D)
+- maxResults = 30
+
+NOTE : le filtre Gmail ci-dessus exclut directement les sources de bruit connues (Salesforce exceptions, Zapier, GitHub notifications, Trustpilot, Sentry, AWS budgets) et ne garde que la categorie PERSONAL. Cela reduit de ~80% le volume a trier. Si la requete ne retourne pas assez de resultats, faire une 2e requete sans filtre avec maxResults = 50 et appliquer le triage ci-dessous.
 
 ### Triage des emails
 

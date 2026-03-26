@@ -29,6 +29,12 @@ Calcule :
 - **Temps hors reunion** : heures de bureau (9h-19h = 10h) - temps en reunion
 - **Blocs libres** : les creneaux > 30min sans reunion entre 9h et 19h. Lister chaque bloc avec sa duree.
 
+## Etape 1bis — Absences de la semaine (Lucca)
+
+Lance `/lucca` via l'outil Skill (sans argument = absences de l'équipe pour la semaine en cours).
+
+Intègre le résultat dans la synthèse finale (section ABSENCES DE LA SEMAINE) et dans le message Slack principal.
+
 ## Etape 2 — Detecter les 1:1 du jour
 
 Lis `~/.claude/team.json` pour obtenir la liste des managees (first_name).
@@ -39,6 +45,8 @@ Pour chaque event du calendrier du jour, verifie si le titre contient "1:1", "1/
 
 Lancer les /1to1 en SEQUENTIEL (pas en parallele, chaque /1to1 est un skill complet qui fait beaucoup d'appels).
 
+OPTIMISATION : si il y a 2+ 1:1 dans la journee, lancer le /gather (etape 3) en PARALLELE du 2e /1to1 via un Agent en background. Le gather et le 2e 1:1 sont independants et peuvent tourner en meme temps. Attendre que les deux soient termines avant de passer a l'etape 4.
+
 Si aucun 1:1 n'est detecte, skip cette etape.
 
 ## Etape 3 — Gather
@@ -46,6 +54,15 @@ Si aucun 1:1 n'est detecte, skip cette etape.
 Lance `/gather` via l'outil Skill (sans argument = reprise automatique depuis le dernier gather).
 
 Attends le resultat avant de continuer.
+
+## Etape 3bis — Veille marche (optionnelle)
+
+Lance `/market-watch` via l'outil Skill. Cette etape fournit le contexte macro du marche du credit immobilier (taux, OAT, decisions bancaires, geopolitique).
+
+Integre les signaux forts dans la section RATTRAPAGE du briefing final (1-2 lignes max, pas le rapport complet).
+Le rapport complet est ecrit dans la page Gathered par le skill lui-meme.
+
+Si le morning coffee prend deja trop de temps (> 15 minutes ecoulees depuis le debut), SKIP cette etape.
 
 ## Etape 4 — Plan d'action + reconciliation avec le gather
 
@@ -111,6 +128,16 @@ AGENDA DU JOUR
   - 11:00-13:00 (2h)
   - 15:30-19:00 (3h30)
 
+ABSENCES DE LA SEMAINE
+----------------------
+[Absences récupérées depuis Lucca, jour par jour]
+
+  Lundi    : Kévin Morpain (congés)
+  Mardi    : Kévin Morpain (congés), Alice Mothe (congés)
+  ...
+
+  Absent(e)s aujourd'hui : Kévin Morpain
+
 1:1 DU JOUR
 -----------
 [Pour chaque 1:1 detecte, un mini-resume du briefing /1to1 :]
@@ -170,14 +197,32 @@ Le /gather et les /1to1 publient deja leurs resultats dans Notion -- le morning 
 
 Envoie le briefing en DM Slack a l'utilisateur (slack_id : U3KR4PTDX) avec `mcp__claude_ai_Slack__slack_send_message`.
 
-Le message principal contient l'AGENDA DU JOUR (liste des reunions + temps libre + blocs libres).
-Les sections suivantes sont envoyees en replies dans le thread (thread_ts du message principal) :
-1. Les 1:1 du jour (resume de chaque briefing)
-2. Le rattrapage (gather : REQUIERT TON ACTION, decisions prises, equipe)
-3. MA JOURNEE (suggestions pour les blocs libres + actions urgentes)
+Le message principal contient l'AGENDA DU JOUR (liste des réunions + temps libre + blocs libres) + les ABSENCES DE LA SEMAINE.
+Les sections suivantes sont envoyées en replies dans le thread (thread_ts du message principal) :
+1. Les 1:1 du jour (résumé de chaque briefing)
+2. Le rattrapage (gather : REQUIERT TON ACTION, décisions prises, équipe)
+3. MA JOURNÉE (suggestions pour les blocs libres + actions urgentes)
 
 REGLES :
 - Pas d'emojis unicode dans le texte (sauf si explicitement demandé)
 - Utiliser le formatting Slack standard : *bold* pour les titres, - pour les listes
 - Max 4000 chars par message, decouper si necessaire
 - Ne pas envoyer les sections vides
+
+## Etape 8 — Proposition d'amelioration
+
+Contexte : l'utilisateur est CTO. Son objectif est de savoir comment l'entreprise vit pour aller la ou on peut avoir besoin de lui. Le morning coffee doit etre un peu mieux chaque jour.
+
+A la toute fin de l'execution (apres l'envoi Slack), prends du recul sur le morning coffee qui vient de se derouler et propose 1 a 3 ameliorations concretes. Pour chaque amelioration :
+- Decris le probleme ou le manque observe pendant cette execution
+- Propose une modification precise (quelle etape, quel fichier, quel changement)
+- Estime l'impact (quel gain pour le CTO au quotidien)
+
+Types d'ameliorations possibles :
+- ANGLES MORTS : des informations qui manquaient et qui auraient ete utiles (ex: un canal Slack non couvert, une source de donnees ignoree, un signal business rate)
+- BRUIT : des informations qui ont ete collectees mais qui n'apportent rien au CTO (ex: trop de notifications automatiques, sections vides, doublons entre gather et 1:1)
+- FORMAT : des ameliorations de lisibilite ou de structure du briefing (ex: une section trop longue, un tri manquant, une info mal placee)
+- FLUX : des ameliorations du process lui-meme (ex: une etape trop lente, un skill manquant, une reconciliation mal faite)
+- PROFONDEUR : des endroits ou l'analyse devrait aller plus loin (ex: lire un thread Slack important, croiser deux sources, detecter un pattern)
+
+Affiche les propositions dans la console. Si l'utilisateur valide une amelioration, applique-la immediatement en modifiant le fichier skill correspondant (morning-coffee.md, gather.md, 1to1.md, etc.).
