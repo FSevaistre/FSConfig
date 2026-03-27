@@ -56,11 +56,11 @@ Avant de preparer les 1:1 d'aujourd'hui, verifier que ceux d'hier ont ete docume
    - Si la date correspond a hier mais VIDE/quasi-vide : lancer `/1to1-wrap-up <prenom>` via Skill
    - Si pas d'entree a la date d'hier du tout : lancer `/1to1-wrap-up <prenom>` via Skill
 
-4. Lancer les wrap-ups en SEQUENTIEL (chacun telecharge un transcript et met a jour Notion).
+4. Lancer les wrap-ups EN PARALLELE via des Agents en background (chacun telecharge un transcript et met a jour Notion). Cela divise le temps par 2 quand il y a 2+ 1:1.
 
 Si aucun 1:1 hier, ou si tous sont deja documentes, skip.
 
-NOTE : cette etape est BLOQUANTE — on ne prepare pas un 1:1 aujourd'hui avec un managee dont le 1:1 d'hier n'est pas documente. Ca garantit la continuite des notes.
+NOTE : cette etape est BLOQUANTE — on ne prepare pas un 1:1 aujourd'hui avec un managee dont le 1:1 d'hier n'est pas documente. Ca garantit la continuite des notes. Attendre que TOUS les agents de wrap-up aient termine avant de passer a l'etape 2.
 
 ## Etape 2 — Detecter et preparer les 1:1
 
@@ -93,20 +93,27 @@ Integrer dans le briefing :
 
 ## Etape 4 — Plan d'action + reconciliation avec le gather
 
-### 4a — Recuperer le plan d'action
+### 4a — Recuperer le plan d'action (methode exhaustive)
 
-Recupere le plan d'action depuis Notion :
-- Data source : `collection://c4f17e42-c412-4b75-8f8e-588b9b7e5bea`
-- Utilise `mcp__claude_ai_Notion__notion-search` avec data_source_url et query vide ou generique pour lister les cartes
+Recupere le plan d'action depuis Notion en fetchant TOUTES les cartes recentes :
 
-Filtre les cartes qui ne sont PAS done/terminées. Pour chaque carte active, note :
-- Titre
-- Statut (Done / Not started / In progress)
-- Date limite (Due Date)
-- Owner / assignee
-- Timebox (heures)
+1. D'abord, utilise `mcp__claude_ai_Notion__notion-search` avec :
+   - data_source_url = `collection://c4f17e42-c412-4b75-8f8e-588b9b7e5bea`
+   - query = termes generiques (ex: "action", "faire", "sujet")
+   - page_size = 25
+   - max_highlight_length = 0
+   Repete avec d'autres queries si necessaire pour couvrir plus de cartes.
 
-Si la recherche ne retourne pas assez de resultats, utilise `mcp__claude_ai_Notion__notion-fetch` directement sur le board (`f5b2bbdd-96c8-4431-bdbb-29cc6acb9121`) pour voir la structure.
+2. Pour CHAQUE carte retournee, fetch ses proprietes avec `mcp__notion__notion-fetch` pour obtenir le statut (Done/Not started/In progress), la Due Date, le Timebox, et l'Assignee. La recherche semantique Notion ne retourne pas les proprietes — il FAUT fetch chaque carte.
+
+3. Filtre en local : ne garder que les cartes dont le statut est "Not started" ou "In progress".
+
+4. Classe les cartes actives en 3 categories :
+   - DUE AUJOURD'HUI ou EN RETARD (Due Date <= aujourd'hui) → dans le briefing
+   - SANS DATE → dans le briefing (a planifier)
+   - DUE DANS LE FUTUR (Due Date > aujourd'hui) → exclure du briefing
+
+OPTIMISATION : pour eviter de fetch 25 cartes une par une, lancer les fetchs en parallele par lots de 6.
 
 ### 4b — Reconcilier chaque action du gather avec le plan d'action
 
